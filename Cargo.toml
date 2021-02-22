@@ -1,0 +1,9 @@
+[package]
+name = "xvi"
+version = "0.1.0"
+authors = ["Artem Senichev <artemsen@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+ncurses = { version = "5.101.0", features = ["wide"] }
+unicode-segmentation = "1.7.1"

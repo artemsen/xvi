@@ -1,0 +1,34 @@
+# XVI configuration file
+
+[history]
+# Number of stored recent files with last cursor position
+FilePos = 10
+
+[colors]
+# Base color theme (Light or Dark)
+Theme = Dark
+
+# Custom color setup (foreground, background)
+#OffsetNormal =    241, 232
+#OffsetHi =        250, 235
+#HexNormal =       247, 233
+#HexHi =           250, 235
+#HexModified =     220, 233
+#HexModifiedHi =   220, 235
+#AsciiNormal =     241, 233
+#AsciiHi =         250, 235
+#AsciiModified =   142, 233
+#AsciiModifiedHi = 220, 235
+#StatusBar =       242, 236
+#KeyBarId =        242, 233
+#KeyBarTitle =     242, 236
+#DialogNormal =    235, 245
+#DialogError =     250, 88
+#DialogShadow =    237, 232
+#ItemDisabled =    239, 245
+#ItemFocused =     250, 238
+#EditNormal =      235, 243
+#EditFocused =     250, 238
+#EditSelection =   250, 235
+
+# vim: filetype=dosini
