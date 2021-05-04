@@ -102,6 +102,7 @@ impl Editor {
                 self.view.wrap = !self.view.wrap;
                 let (width, height) = self.cui.size();
                 self.cui.clear();
+                self.page.offset = u64::MAX;
                 self.view.resize(width, height - 2 /*skip bars*/);
                 self.move_cursor(Location::Absolute(self.cursor.offset));
                 true
