@@ -6,7 +6,7 @@ use super::widget::*;
 
 /// Dialog window.
 pub struct Dialog {
-    /// Item placed on the dialog.
+    /// Items on the dialog window.
     items: Vec<DialogItem>,
     /// Dialog's rules (links between items, etc).
     pub rules: Vec<DialogRule>,
@@ -58,6 +58,31 @@ impl Dialog {
         self.items[id as usize].widget.as_ref().get_data()
     }
 
+    /// Apply rules for specified items.
+    pub fn apply(&mut self, item: ItemId) {
+        for it in self.rules.iter() {
+            match it {
+                DialogRule::CopyData(src, dst, handler) => {
+                    if item == *src {
+                        let data = self.items[*src as usize].widget.as_ref().get_data();
+                        if let Some(data) = handler.as_ref().copy_data(&data) {
+                            self.items[*dst as usize].widget.as_mut().set_data(data);
+                        }
+                    }
+                }
+                DialogRule::StateChange(src, dst, handler) => {
+                    if item == *src {
+                        let data = self.items[*src as usize].widget.as_ref().get_data();
+                        if let Some(state) = handler.as_ref().set_state(&data) {
+                            self.items[*dst as usize].enabled = state;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Run dialog: show window and handle external events.
     pub fn run(&mut self, cui: &dyn Cui) -> Option<ItemId> {
         let mut rc = None;
@@ -66,7 +91,7 @@ impl Dialog {
         let (screen_width, screen_height) = cui.size();
         let mut canvas = Canvas {
             x: screen_width / 2,
-            y: screen_height / 2,
+            y: (screen_height as f32 / 2.5) as usize,
             width: 0,
             height: 0,
             cui,
@@ -236,31 +261,6 @@ impl Dialog {
         }
         self.focus = focus;
         self.items[focus as usize].widget.focus();
-    }
-
-    /// Apply rules for specified items.
-    pub fn apply(&mut self, item: ItemId) {
-        for it in self.rules.iter() {
-            match it {
-                DialogRule::CopyData(src, dst, handler) => {
-                    if item == *src {
-                        let data = self.items[*src as usize].widget.as_ref().get_data();
-                        if let Some(data) = handler.as_ref().copy_data(&data) {
-                            self.items[*dst as usize].widget.as_mut().set_data(data);
-                        }
-                    }
-                }
-                DialogRule::StateChange(src, dst, handler) => {
-                    if item == *src {
-                        let data = self.items[*src as usize].widget.as_ref().get_data();
-                        if let Some(state) = handler.as_ref().set_state(&data) {
-                            self.items[*dst as usize].enabled = state;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
     }
 }
 
