@@ -7,9 +7,18 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 /// Edited file.
 pub struct File {
-    file: std::fs::File,
+    /// Full path to the file.
     pub name: String,
+    /// File size.
     pub size: u64,
+
+    /// File handle.
+    file: std::fs::File,
+
+    /// Queue of changes.
+    changes: Vec<Change>,
+    /// undo/redo position (index of the next change).
+    curpos: usize,
 }
 
 impl File {
@@ -18,9 +27,11 @@ impl File {
         let file = OpenOptions::new().read(true).open(&path)?;
         let meta = file.metadata()?;
         Ok(Self {
-            file,
             name: String::from(path),
             size: meta.len(),
+            file,
+            changes: Vec::with_capacity(4096 / std::mem::size_of::<Change>()),
+            curpos: 0,
         })
     }
 
@@ -37,24 +48,22 @@ impl File {
     }
 
     /// Save file.
-    pub fn save(&mut self, changes: &BTreeMap<u64, u8>) -> Result<(), std::io::Error> {
+    pub fn save(&mut self) -> Result<(), std::io::Error> {
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .open(self.name.clone())?;
-        for (offset, value) in changes.iter() {
+        for (offset, value) in self.get().iter() {
             file.seek(SeekFrom::Start(*offset))?;
             file.write_all(&[*value])?;
         }
+        self.changes.clear();
+        self.curpos = 0;
         Ok(())
     }
 
     /// Save file with new name.
-    pub fn save_as(
-        &mut self,
-        name: String,
-        changes: &BTreeMap<u64, u8>,
-    ) -> Result<(), std::io::Error> {
+    pub fn save_as(&mut self, name: String) -> Result<(), std::io::Error> {
         let mut buf = [0; 512];
 
         let mut new_file = OpenOptions::new()
@@ -64,6 +73,7 @@ impl File {
             .open(name.clone())?;
 
         self.file.seek(SeekFrom::Start(0))?;
+        let changes = self.get();
         let mut pos = 0;
         loop {
             // read next block
@@ -87,18 +97,15 @@ impl File {
         self.file = new_file;
         let meta = self.file.metadata()?;
         self.size = meta.len();
+        self.changes.clear();
+        self.curpos = 0;
 
         Ok(())
     }
 
     /// Find sequence inside file.
-    pub fn find(
-        &mut self,
-        sequence: &[u8],
-        start: u64,
-        backward: bool,
-        changes: &BTreeMap<u64, u8>,
-    ) -> Option<u64> {
+    pub fn find(&mut self, sequence: &[u8], start: u64, backward: bool) -> Option<u64> {
+        let changes = self.get();
         let step = 1024;
         let size = step + sequence.len() as i64;
         let mut offset = start as i64;
@@ -160,4 +167,73 @@ impl File {
 
         None
     }
+
+    /// Check if file is modified.
+    pub fn modified(&self) -> bool {
+        self.get().is_empty()
+    }
+
+    /// Get map of actual changes: offset -> value.
+    pub fn get(&self) -> BTreeMap<u64, u8> {
+        let mut origins = BTreeMap::new();
+        let mut changes = BTreeMap::new();
+        for change in self.changes[0..self.curpos].iter() {
+            origins.entry(change.offset).or_insert(change.old);
+            changes.insert(change.offset, change.new);
+        }
+        // remove changes that restore origin values
+        for (offset, origin) in origins.iter() {
+            if origin == changes.get(offset).unwrap() {
+                changes.remove(offset);
+            }
+        }
+        changes
+    }
+
+    /// Modify single byte.
+    pub fn set(&mut self, offset: u64, old: u8, new: u8) {
+        // try to update the last changed value if it in the same offset
+        if let Some(last) = self.changes.last_mut() {
+            if last.offset == offset {
+                last.new = new;
+                return;
+            }
+        }
+
+        // reset forward changes by removing the tail
+        if self.curpos != 0 {
+            self.changes.truncate(self.curpos);
+        }
+
+        self.changes.push(Change { offset, old, new });
+        self.curpos = self.changes.len();
+    }
+
+    /// Undo the last byte change, returns offset of it.
+    pub fn undo(&mut self) -> Option<Change> {
+        if self.changes.is_empty() || self.curpos == 0 {
+            None
+        } else {
+            self.curpos -= 1;
+            Some(self.changes[self.curpos])
+        }
+    }
+
+    /// Redo the next byte change, returns offset of it
+    pub fn redo(&mut self) -> Option<Change> {
+        if self.changes.is_empty() || self.curpos == self.changes.len() {
+            None
+        } else {
+            self.curpos += 1;
+            Some(self.changes[self.curpos - 1])
+        }
+    }
+}
+
+/// Single change
+#[derive(Copy, Clone)]
+pub struct Change {
+    pub offset: u64,
+    pub old: u8,
+    pub new: u8,
 }

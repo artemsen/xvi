@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::buffer::*;
 use super::cui::*;
 use super::cursor::*;
 use super::dialog::*;
@@ -24,8 +23,6 @@ pub struct Editor {
     page: PageData,
     /// View of the currently edited (visible) data.
     view: PageView,
-    /// Buffer with changes (holder for modified data).
-    buffer: Buffer,
     /// Cursor position.
     cursor: Cursor,
     /// Last used "goto" address.
@@ -54,7 +51,6 @@ impl Editor {
             file,
             page: PageData::new(u64::MAX, Vec::new()),
             view: PageView::new(fsize, width, height - 2 /* status and keybar */),
-            buffer: Buffer::new(),
             last_goto: history.last_goto,
             search: Search::new(history.last_search),
             exit: false,
@@ -300,10 +296,9 @@ impl Editor {
     /// Save current file, returns false if operation failed.
     fn save(&mut self) -> bool {
         loop {
-            match self.file.save(&self.buffer.get()) {
+            match self.file.save() {
                 Ok(()) => {
-                    self.buffer.reset();
-                    self.page.update(&self.buffer.get());
+                    self.page.update(&self.file.get());
                     return true;
                 }
                 Err(err) => {
@@ -331,10 +326,9 @@ impl Editor {
     fn save_as(&mut self) -> bool {
         if let Some(new_name) = SaveAsDialog::show(self.cui.as_ref(), self.file.name.clone()) {
             loop {
-                match self.file.save_as(new_name.clone(), &self.buffer.get()) {
+                match self.file.save_as(new_name.clone()) {
                     Ok(()) => {
-                        self.buffer.reset();
-                        self.page.update(&self.buffer.get());
+                        self.page.update(&self.file.get());
                         return true;
                     }
                     Err(err) => {
@@ -383,12 +377,10 @@ impl Editor {
         if self.search.data.is_empty() {
             self.search.backward = backward;
             self.find();
-        } else if let Some(offset) = self.file.find(
-            &self.search.data,
-            self.cursor.offset,
-            backward,
-            &self.buffer.get(),
-        ) {
+        } else if let Some(offset) = self
+            .file
+            .find(&self.search.data, self.cursor.offset, backward)
+        {
             self.move_cursor(Location::Absolute(offset));
         } else {
             MessageBox::new("Search", DialogType::Error)
@@ -400,7 +392,7 @@ impl Editor {
 
     /// Exit from editor.
     fn exit(&mut self) {
-        self.exit = if self.buffer.get().is_empty() {
+        self.exit = if self.file.modified() {
             true
         } else if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
             .center(&self.file.name)
@@ -446,15 +438,15 @@ impl Editor {
             .read(new_base, self.view.lines * self.view.columns)
             .unwrap();
         self.page = PageData::new(new_base, data);
-        self.page.update(&self.buffer.get());
+        self.page.update(&self.file.get());
     }
 
     /// Undo last modification.
     fn undo(&mut self) {
-        if let Some(change) = self.buffer.undo() {
+        if let Some(change) = self.file.undo() {
             if self.page.visible(change.offset) {
                 self.page.set(change.offset, change.old, PageData::DEFAULT);
-                self.page.update(&self.buffer.get());
+                self.page.update(&self.file.get());
             }
             self.move_cursor(Location::Absolute(change.offset));
         }
@@ -462,9 +454,9 @@ impl Editor {
 
     /// Redo (opposite to Undo).
     fn redo(&mut self) {
-        if let Some(change) = self.buffer.redo() {
+        if let Some(change) = self.file.redo() {
             if self.page.visible(change.offset) {
-                self.page.update(&self.buffer.get());
+                self.page.update(&self.file.get());
             }
             self.move_cursor(Location::Absolute(change.offset));
         }
@@ -479,8 +471,8 @@ impl Editor {
         let old = self.page.data[index];
         let new = (old & !mask) | (value & mask);
 
-        self.buffer.add(offset, old, new);
-        self.page.update(&self.buffer.get());
+        self.file.set(offset, old, new);
+        self.page.update(&self.file.get());
     }
 
     /// Draw editor.
@@ -526,7 +518,7 @@ impl Editor {
             value = value,
             offset = self.cursor.offset,
             percent = percent,
-            ch = if self.buffer.get().is_empty() {' '} else {'*'}
+            ch = if self.file.modified() {'*'} else {' '}
         );
         canvas.print(canvas.width - stat.len(), 0, &stat);
 
