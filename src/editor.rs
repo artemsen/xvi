@@ -298,7 +298,7 @@ impl Editor {
         loop {
             match self.file.save() {
                 Ok(()) => {
-                    self.page.update(&self.file.get());
+                    self.page.update(&self.file.get_modified());
                     return true;
                 }
                 Err(err) => {
@@ -328,7 +328,7 @@ impl Editor {
             loop {
                 match self.file.save_as(new_name.clone()) {
                     Ok(()) => {
-                        self.page.update(&self.file.get());
+                        self.page.update(&self.file.get_modified());
                         return true;
                     }
                     Err(err) => {
@@ -392,7 +392,7 @@ impl Editor {
 
     /// Exit from editor.
     fn exit(&mut self) {
-        self.exit = if self.file.modified() {
+        self.exit = if !self.file.is_modified() {
             true
         } else if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
             .center(&self.file.name)
@@ -435,19 +435,15 @@ impl Editor {
         );
         let data = self
             .file
-            .read(new_base, self.view.lines * self.view.columns)
+            .get(new_base, self.view.lines * self.view.columns)
             .unwrap();
         self.page = PageData::new(new_base, data);
-        self.page.update(&self.file.get());
+        self.page.update(&self.file.get_modified());
     }
 
     /// Undo last modification.
     fn undo(&mut self) {
         if let Some(change) = self.file.undo() {
-            if self.page.visible(change.offset) {
-                self.page.set(change.offset, change.old, PageData::DEFAULT);
-                self.page.update(&self.file.get());
-            }
             self.move_cursor(Location::Absolute(change.offset));
         }
     }
@@ -455,9 +451,6 @@ impl Editor {
     /// Redo (opposite to Undo).
     fn redo(&mut self) {
         if let Some(change) = self.file.redo() {
-            if self.page.visible(change.offset) {
-                self.page.update(&self.file.get());
-            }
             self.move_cursor(Location::Absolute(change.offset));
         }
     }
@@ -472,7 +465,8 @@ impl Editor {
         let new = (old & !mask) | (value & mask);
 
         self.file.set(offset, old, new);
-        self.page.update(&self.file.get());
+        self.page.set(offset, new, PageData::CHANGED);
+        self.page.update(&self.file.get_modified());
     }
 
     /// Draw editor.
@@ -518,7 +512,7 @@ impl Editor {
             value = value,
             offset = self.cursor.offset,
             percent = percent,
-            ch = if self.file.modified() {'*'} else {' '}
+            ch = if self.file.is_modified() {'*'} else {' '}
         );
         canvas.print(canvas.width - stat.len(), 0, &stat);
 

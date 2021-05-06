@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -16,6 +16,11 @@ pub struct File {
     /// File handle.
     file: std::fs::File,
 
+    /// Data cache.
+    cache_data: Vec<u8>,
+    /// Start address of data cache.
+    cache_start: u64,
+
     /// Queue of changes.
     ch_queue: Vec<Change>,
     /// undo/redo position (index of the next change).
@@ -25,6 +30,8 @@ pub struct File {
 }
 
 impl File {
+    const CACHE_SIZE: usize = 4096;
+
     /// Open file.
     pub fn open(path: &str) -> io::Result<Self> {
         let file = OpenOptions::new().read(true).open(&path)?;
@@ -33,6 +40,8 @@ impl File {
             name: String::from(path),
             size: meta.len(),
             file,
+            cache_data: Vec::new(),
+            cache_start: 0,
             ch_queue: Vec::new(),
             ch_index: 0,
             ch_map: BTreeMap::new(),
@@ -157,26 +166,59 @@ impl File {
         None
     }
 
-    /// Read up to max_size bytes from file.
-    pub fn read(&mut self, offset: u64, max_size: usize) -> io::Result<Vec<u8>> {
+    /// Read up to `size` bytes from file.
+    /// Returns array with applied changes.
+    fn read(&mut self, offset: u64, size: usize) -> io::Result<Vec<u8>> {
         debug_assert!(offset < self.size);
 
-        let size = std::cmp::min((self.size - offset) as usize, max_size);
+        // read up to the end of file
+        let size = std::cmp::min((self.size - offset) as usize, size);
         let mut data = vec![0; size];
         self.file.seek(SeekFrom::Start(offset))?;
         self.file.read_exact(&mut data)?;
 
         // apply changes
-        for (&pos, &val) in self.ch_map.range((offset as u64)..(offset + size as u64)) {
-            data[(pos - offset as u64) as usize] = val;
+        let end_offset = offset + size as u64;
+        for (&addr, &value) in self.ch_map.range(offset..end_offset) {
+            let index = (addr - offset) as usize;
+            data[index] = value;
         }
 
         Ok(data)
     }
 
-    /// Get map of actual changes: offset -> value.
-    pub fn get(&self) -> BTreeMap<u64, u8> {
-        self.ch_map.clone()
+    /// Get addresses of modified bytes.
+    pub fn get_modified(&self) -> BTreeSet<u64> {
+        let mut offsets = BTreeSet::new();
+        for &offset in self.ch_map.keys() {
+            offsets.insert(offset);
+        }
+        offsets
+    }
+
+    /// Check if file is modified.
+    pub fn is_modified(&self) -> bool {
+        !self.ch_map.is_empty()
+    }
+
+    /// Get data from file.
+    /// Returns array with applied changes.
+    pub fn get(&mut self, offset: u64, size: usize) -> io::Result<Vec<u8>> {
+        debug_assert!(offset < self.size);
+
+        let size = std::cmp::min((self.size - offset) as usize, size);
+
+        // update cache
+        let cache_miss = offset < self.cache_start
+            || offset + size as u64 >= self.cache_start + self.cache_data.len() as u64;
+        if cache_miss {
+            self.cache_data = self.read(offset, std::cmp::max(size, File::CACHE_SIZE))?;
+            self.cache_start = offset;
+        }
+
+        let start = (offset - self.cache_start) as usize;
+        let end = start + size;
+        Ok(self.cache_data[start..end].to_vec())
     }
 
     /// Modify single byte.
@@ -220,11 +262,6 @@ impl File {
             self.refresh();
             Some(self.ch_queue[self.ch_index - 1])
         }
-    }
-
-    /// Check if file is modified.
-    pub fn modified(&self) -> bool {
-        self.ch_map.is_empty()
     }
 
     /// Update map of actual changes.

@@ -76,7 +76,7 @@ fn main() {
         let radix = if text.starts_with("0x") {
             text = text[2..].to_string();
             16
-        } else if text.chars().any(|c| matches!(c, 'a'..='f')) {
+        } else if text.to_lowercase().chars().any(|c| matches!(c, 'a'..='f')) {
             16
         } else {
             10

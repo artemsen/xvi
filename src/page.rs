@@ -3,7 +3,7 @@
 
 use super::cui::*;
 use super::cursor::*;
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 /// Page data buffer.
 pub struct PageData {
@@ -53,14 +53,14 @@ impl PageData {
     }
 
     /// Update page with changed data.
-    pub fn update(&mut self, changes: &BTreeMap<u64, u8>) {
+    pub fn update(&mut self, changes: &BTreeSet<u64>) {
         for index in 0..self.data.len() {
             let offset = self.offset + index as u64;
-            if let Some(value) = changes.get(&offset) {
-                self.set(offset, *value, PageData::CHANGED);
+            self.state[index] = if changes.contains(&offset) {
+                PageData::CHANGED
             } else {
-                self.state[index] = PageData::DEFAULT;
-            }
+                PageData::DEFAULT
+            };
         }
     }
 }
