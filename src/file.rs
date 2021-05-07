@@ -145,7 +145,9 @@ impl File {
                 }
             }
 
-            let file_data = self.read(offset as u64, size as usize).unwrap();
+            let mut file_data = self.read(offset as u64, size as usize).unwrap();
+            self.apply(offset as u64, &mut file_data);
+
             let mut window = file_data.windows(sequence.len());
             if !backward {
                 if let Some(pos) = window.position(|wnd| wnd == sequence) {
@@ -167,7 +169,6 @@ impl File {
     }
 
     /// Read up to `size` bytes from file.
-    /// Returns array with applied changes.
     fn read(&mut self, offset: u64, size: usize) -> io::Result<Vec<u8>> {
         debug_assert!(offset < self.size);
 
@@ -177,14 +178,16 @@ impl File {
         self.file.seek(SeekFrom::Start(offset))?;
         self.file.read_exact(&mut data)?;
 
-        // apply changes
-        let end_offset = offset + size as u64;
+        Ok(data)
+    }
+
+    /// Apply changes to array of raw data.
+    fn apply(&self, offset: u64, data: &mut Vec<u8>) {
+        let end_offset = offset + data.len() as u64;
         for (&addr, &value) in self.ch_map.range(offset..end_offset) {
             let index = (addr - offset) as usize;
             data[index] = value;
         }
-
-        Ok(data)
     }
 
     /// Get addresses of modified bytes.
@@ -218,7 +221,10 @@ impl File {
 
         let start = (offset - self.cache_start) as usize;
         let end = start + size;
-        Ok(self.cache_data[start..end].to_vec())
+        let mut data = self.cache_data[start..end].to_vec();
+        self.apply(offset, &mut data);
+
+        Ok(data)
     }
 
     /// Modify single byte.

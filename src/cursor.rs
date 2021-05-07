@@ -160,7 +160,6 @@ impl Cursor {
                     } else {
                         new_base = max - page_size;
                         new_base -= max % cols as u64;
-                        new_base += cols as u64;
                     }
                     self.offset = max - 1;
                     self.half = HalfByte::Left;
@@ -198,7 +197,6 @@ impl Cursor {
                     } else {
                         new_base = max - page_size;
                         new_base -= max % cols as u64;
-                        new_base += cols as u64;
                     }
                 }
             }

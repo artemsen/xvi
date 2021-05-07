@@ -11,6 +11,7 @@ use super::messagebox::*;
 use super::page::*;
 use super::saveas::*;
 use super::search::*;
+use super::view::*;
 use super::widget::*;
 
 /// Editor: implements business logic of a hex editor.
@@ -22,7 +23,7 @@ pub struct Editor {
     /// Currently loaded and edited data.
     page: PageData,
     /// View of the currently edited (visible) data.
-    view: PageView,
+    view: View,
     /// Cursor position.
     cursor: Cursor,
     /// Last used "goto" address.
@@ -43,14 +44,17 @@ impl Editor {
             place: Place::Hex,
         };
         let history = History::new();
-        let (width, height) = cui.size();
-        let fsize = file.size;
         Ok(Self {
             cursor,
             cui,
             file,
             page: PageData::new(u64::MAX, Vec::new()),
-            view: PageView::new(fsize, width, height - 2 /* status and keybar */),
+            view: View {
+                fixed_width: false,
+                ascii: true,
+                statusbar: true,
+                keybar: true,
+            },
             last_goto: history.last_goto,
             search: Search::new(history.last_search),
             exit: false,
@@ -68,8 +72,6 @@ impl Editor {
             match self.cui.poll_event() {
                 Event::TerminalResize => {
                     self.cui.clear();
-                    let (width, height) = self.cui.size();
-                    self.view.resize(width, height - 2 /*skip bars*/);
                     self.move_cursor(Location::Absolute(self.cursor.offset));
                 }
                 Event::KeyPress(key) => {
@@ -95,11 +97,8 @@ impl Editor {
                 true
             }
             Key::F(3) => {
-                self.view.wrap = !self.view.wrap;
-                let (width, height) = self.cui.size();
                 self.cui.clear();
-                self.page.offset = u64::MAX;
-                self.view.resize(width, height - 2 /*skip bars*/);
+                self.view.fixed_width = !self.view.fixed_width;
                 self.move_cursor(Location::Absolute(self.cursor.offset));
                 true
             }
@@ -426,17 +425,13 @@ impl Editor {
 
     /// Move cursor.
     fn move_cursor(&mut self, loc: Location) {
-        let new_base = self.cursor.move_to(
-            loc,
-            self.page.offset,
-            self.file.size,
-            self.view.lines,
-            self.view.columns,
-        );
-        let data = self
-            .file
-            .get(new_base, self.view.lines * self.view.columns)
-            .unwrap();
+        let (width, height) = self.cui.size();
+        let (rows, columns, _) = self.view.get_scheme(width, height, self.file.size);
+        let new_base = self
+            .cursor
+            .move_to(loc, self.page.offset, self.file.size, rows, columns);
+        let new_base = new_base - new_base % columns as u64;
+        let data = self.file.get(new_base, rows * columns).unwrap();
         self.page = PageData::new(new_base, data);
         self.page.update(&self.file.get_modified());
     }
@@ -465,96 +460,22 @@ impl Editor {
         let new = (old & !mask) | (value & mask);
 
         self.file.set(offset, old, new);
-        self.page.set(offset, new, PageData::CHANGED);
         self.page.update(&self.file.get_modified());
     }
 
     /// Draw editor.
     fn draw(&self) {
         let (width, height) = self.cui.size();
-
-        let status_bar = Canvas {
+        let canvas = Canvas {
             cui: self.cui.as_ref(),
             x: 0,
             y: 0,
             width,
-            height: 1,
+            height,
         };
-        self.draw_status_bar(&status_bar);
-
-        let key_bar = Canvas {
-            cui: self.cui.as_ref(),
-            x: 0,
-            y: height - 1,
-            width,
-            height: 1,
-        };
-        self.draw_key_bar(&key_bar);
-
-        let hex = Canvas {
-            cui: self.cui.as_ref(),
-            x: 0,
-            y: 1,
-            width,
-            height: height - 2, // without status bar and key bar
-        };
-        let (x_cursor, y_cursor) = self.view.print(&hex, &self.page, &self.cursor);
-        self.cui.show_cursor(x_cursor, y_cursor);
-    }
-
-    /// Draw status bar.
-    fn draw_status_bar(&self, canvas: &Canvas) {
-        // right part: position, current value, etc
-        let (value, _) = self.page.get(self.cursor.offset).unwrap();
-        let percent = (self.cursor.offset * 100 / (self.file.size - 1)) as u8;
-        let stat = format!(
-            " {ch} [0x{:02x} {value:<3} 0{value:<3o} {value:08b}]     0x{offset:04x}   {percent:>3}%",
-            value = value,
-            offset = self.cursor.offset,
-            percent = percent,
-            ch = if self.file.is_modified() {'*'} else {' '}
-        );
-        canvas.print(canvas.width - stat.len(), 0, &stat);
-
-        // left part: file name
-        let max_len = canvas.width - stat.len();
-        if self.file.name.len() <= max_len {
-            canvas.print(0, 0, &self.file.name);
-        } else {
-            let mut name = String::from(&self.file.name[..3]);
-            name.push('…');
-            let vs = self.file.name.len() - max_len + 4;
-            name.push_str(&self.file.name[vs..]);
-            canvas.print(0, 0, &name);
-        }
-
-        canvas.color(0, 0, canvas.width, Color::StatusBar);
-    }
-
-    /// Draw key bar (bottom Fn line).
-    fn draw_key_bar(&self, canvas: &Canvas) {
-        let titles = &[
-            "Help",                                         // F1
-            "Save",                                         // F2
-            if self.view.wrap { "UnWrap" } else { "Wrap" }, // F3
-            "",                                             // F4
-            "Goto",                                         // F5
-            "",                                             // F6
-            "Find",                                         // F7
-            "",                                             // F8
-            "",                                             // F9
-            "Exit",                                         // F10
-        ];
-
-        let fn_id_len: usize = 2; // function number length (f1-f0)
-        let width = canvas.width / 10;
-        for i in 0..10 {
-            let x_num = i * width;
-            canvas.print(x_num, 0, &format!("{:>2}", i + 1));
-            canvas.color(x_num, 0, fn_id_len, Color::KeyBarId);
-            let x_label = x_num + fn_id_len;
-            canvas.print(x_label, 0, titles[i as usize]);
-            canvas.color(x_label, 0, width - fn_id_len, Color::KeyBarTitle);
-        }
+        let (x_cursor, y_cursor) = self
+            .view
+            .draw(&canvas, &self.page, &self.cursor, &self.file);
+        canvas.show_cursor(x_cursor, y_cursor);
     }
 }

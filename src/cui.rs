@@ -124,4 +124,11 @@ impl<'a> Canvas<'a> {
     pub fn color_on(&self, color: Color) {
         self.cui.color_on(color);
     }
+
+    /// Show cursor at specified position.
+    pub fn show_cursor(&self, x: usize, y: usize) {
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+        self.cui.show_cursor(self.x + x, self.y + y);
+    }
 }

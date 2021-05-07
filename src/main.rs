@@ -15,6 +15,7 @@ mod messagebox;
 mod page;
 mod saveas;
 mod search;
+mod view;
 mod widget;
 use config::*;
 use curses::Curses;
