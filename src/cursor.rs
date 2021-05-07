@@ -159,7 +159,11 @@ impl Cursor {
                         new_base = 0;
                     } else {
                         new_base = max - page_size;
-                        new_base -= max % cols as u64;
+                        let align = max % cols as u64;
+                        new_base -= align;
+                        if align != 0 {
+                            new_base += cols as u64;
+                        }
                     }
                     self.offset = max - 1;
                     self.half = HalfByte::Left;
@@ -196,13 +200,17 @@ impl Cursor {
                         new_base = 0;
                     } else {
                         new_base = max - page_size;
-                        new_base -= max % cols as u64;
+                        let align = max % cols as u64;
+                        new_base -= align;
+                        if align != 0 {
+                            new_base += cols as u64;
+                        }
                     }
                 }
             }
         };
 
-        new_base
+        new_base - new_base % cols as u64
     }
 }
 

@@ -20,7 +20,6 @@ mod widget;
 use config::*;
 use curses::Curses;
 use editor::Editor;
-use history::*;
 use std::collections::HashMap;
 
 struct Argument {
@@ -82,14 +81,12 @@ fn main() {
         } else {
             10
         };
-        u64::from_str_radix(&text, radix).unwrap_or_else(|err| {
+        Some(u64::from_str_radix(&text, radix).unwrap_or_else(|err| {
             eprintln!("Invalid offset value: {}, {}", opt, err);
             std::process::exit(1);
-        })
-    } else if let Some(hist) = History::new().get_last_pos(&file) {
-        hist
+        }))
     } else {
-        0
+        None
     };
 
     // install custom panic hook to close curses before print error info

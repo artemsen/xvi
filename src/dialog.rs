@@ -87,9 +87,9 @@ impl Dialog {
     pub fn run(&mut self, cui: &dyn Cui) -> Option<ItemId> {
         let mut rc = None;
 
-        // canvas for the dialog
+        // window for the dialog
         let (screen_width, screen_height) = cui.size();
-        let mut canvas = Canvas {
+        let mut wnd = Window {
             x: screen_width / 2,
             y: (screen_height as f32 / 2.5) as usize,
             width: 0,
@@ -98,18 +98,18 @@ impl Dialog {
         };
         for item in self.items.iter() {
             let right = item.x + item.width;
-            if right > canvas.width {
-                canvas.width = right;
+            if right > wnd.width {
+                wnd.width = right;
             }
             let bottom = item.y + item.height;
-            if bottom > canvas.height {
-                canvas.height = bottom;
+            if bottom > wnd.height {
+                wnd.height = bottom;
             }
         }
-        canvas.x -= canvas.width / 2;
-        canvas.y -= canvas.height / 2;
-        canvas.width += Dialog::MARGIN_X * 2;
-        canvas.height += Dialog::MARGIN_Y * 2;
+        wnd.x -= wnd.width / 2;
+        wnd.y -= wnd.height / 2;
+        wnd.width += Dialog::MARGIN_X * 2;
+        wnd.height += Dialog::MARGIN_Y * 2;
 
         // set focus to the first available widget
         if self.focus < 0 {
@@ -119,7 +119,7 @@ impl Dialog {
         // main event handler loop
         loop {
             // redraw
-            self.draw(&canvas);
+            self.draw(&wnd);
 
             // handle next event
             match cui.poll_event() {
@@ -182,49 +182,49 @@ impl Dialog {
     }
 
     /// Draw dialog.
-    fn draw(&self, canvas: &Canvas) {
-        canvas.color_on(if self.dtype == DialogType::Normal {
+    fn draw(&self, wnd: &Window) {
+        wnd.color_on(if self.dtype == DialogType::Normal {
             Color::DialogNormal
         } else {
             Color::DialogError
         });
-        self.draw_background(&canvas);
-        let cursor = self.draw_items(&canvas);
+        self.draw_background(&wnd);
+        let cursor = self.draw_items(&wnd);
         if let Some((x, y)) = cursor {
-            canvas.cui.show_cursor(x, y);
+            wnd.cui.show_cursor(x, y);
         } else {
-            canvas.cui.hide_cursor();
+            wnd.cui.hide_cursor();
         }
     }
 
     /// Draw background and shadow of dialog window.
-    fn draw_background(&self, canvas: &Canvas) {
-        let spaces = (0..canvas.width).map(|_| " ").collect::<String>();
-        for y in 0..canvas.height {
-            canvas.print(0, y, &spaces);
+    fn draw_background(&self, wnd: &Window) {
+        let spaces = (0..wnd.width).map(|_| " ").collect::<String>();
+        for y in 0..wnd.height {
+            wnd.print(0, y, &spaces);
         }
         // shadow, out of window
-        for y in (canvas.y + 1)..(canvas.y + canvas.height) {
-            canvas
+        for y in (wnd.y + 1)..(wnd.y + wnd.height) {
+            wnd
                 .cui
-                .color(canvas.x + canvas.width, y, 2, Color::DialogShadow);
+                .color(wnd.x + wnd.width, y, 2, Color::DialogShadow);
         }
-        canvas.cui.color(
-            canvas.x + 2,
-            canvas.y + canvas.height,
-            canvas.width,
+        wnd.cui.color(
+            wnd.x + 2,
+            wnd.y + wnd.height,
+            wnd.width,
             Color::DialogShadow,
         );
     }
 
     /// Draw items.
-    fn draw_items(&self, canvas: &Canvas) -> Option<(usize, usize)> {
+    fn draw_items(&self, wnd: &Window) -> Option<(usize, usize)> {
         let mut cursor: Option<(usize, usize)> = None;
         for (index, item) in self.items.iter().enumerate() {
-            let subcan = Canvas {
-                cui: canvas.cui,
-                x: canvas.x + item.x + Dialog::MARGIN_X,
-                y: canvas.y + item.y + Dialog::MARGIN_Y,
+            let subcan = Window {
+                cui: wnd.cui,
+                x: wnd.x + item.x + Dialog::MARGIN_X,
+                y: wnd.y + item.y + Dialog::MARGIN_Y,
                 width: item.width,
                 height: item.height,
             };

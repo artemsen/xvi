@@ -95,8 +95,8 @@ pub enum Key {
     Esc,
 }
 
-/// Canvas for drawing.
-pub struct Canvas<'a> {
+/// Window for drawing.
+pub struct Window<'a> {
     pub x: usize,
     pub y: usize,
     pub width: usize,
@@ -104,7 +104,7 @@ pub struct Canvas<'a> {
     pub cui: &'a dyn Cui,
 }
 
-impl<'a> Canvas<'a> {
+impl<'a> Window<'a> {
     /// Print text on the window
     pub fn print(&self, x: usize, y: usize, text: &str) {
         debug_assert!(x <= self.width);

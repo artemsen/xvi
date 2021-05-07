@@ -76,12 +76,12 @@ impl View {
     /// Print page view (offset/hex/ascii), returns screen position of cursor.
     pub fn draw(
         &self,
-        canvas: &Canvas,
+        wnd: &Window,
         page: &PageData,
         cursor: &Cursor,
         file: &File,
     ) -> (usize, usize) {
-        let (rows, columns, offsets) = self.get_scheme(canvas.width, canvas.height, file.size);
+        let (rows, columns, offsets) = self.get_scheme(wnd.width, wnd.height, file.size);
 
         // cursor coordinates inside hex/ascii field
         let cursor_x = cursor.offset as usize % columns;
@@ -89,32 +89,31 @@ impl View {
 
         // status bar
         if self.statusbar {
-            let bar = Canvas {
-                cui: canvas.cui,
-                x: canvas.x,
-                y: canvas.y,
-                width: canvas.width,
+            let bar = Window {
+                cui: wnd.cui,
+                x: wnd.x,
+                y: wnd.y,
+                width: wnd.width,
                 height: 1,
             };
             self.draw_statusbar(&bar, page, file, cursor);
-            //bar.print(0, 0, &format!("{:x} {} {}x{}", page.offset, cursor.offset - page.offset, cursor_x, cursor_y));
         }
 
         // offsets (addresses)
-        let offset = Canvas {
-            cui: canvas.cui,
-            x: canvas.x,
-            y: canvas.y + if self.statusbar { 1 } else { 0 },
+        let offset = Window {
+            cui: wnd.cui,
+            x: wnd.x,
+            y: wnd.y + if self.statusbar { 1 } else { 0 },
             width: offsets,
             height: rows,
         };
         self.draw_offsets(&offset, page.offset, file.size, columns, cursor.offset);
 
         // hex dump
-        let hex = Canvas {
-            cui: canvas.cui,
+        let hex = Window {
+            cui: wnd.cui,
             x: offset.x + offset.width + View::HEX_MARGIN,
-            y: canvas.y + if self.statusbar { 1 } else { 0 },
+            y: wnd.y + if self.statusbar { 1 } else { 0 },
             width: columns / View::BYTES_IN_WORD * View::WORD_LENGTH - View::WORD_MARGIN,
             height: rows,
         };
@@ -131,10 +130,10 @@ impl View {
 
         // ascii data
         if self.ascii {
-            let ascii = Canvas {
-                cui: canvas.cui,
+            let ascii = Window {
+                cui: wnd.cui,
                 x: hex.x + hex.width + View::HEX_MARGIN,
-                y: canvas.y + if self.statusbar { 1 } else { 0 },
+                y: wnd.y + if self.statusbar { 1 } else { 0 },
                 width: columns,
                 height: rows,
             };
@@ -146,11 +145,11 @@ impl View {
 
         // key bar
         if self.keybar {
-            let bar = Canvas {
-                cui: canvas.cui,
-                x: canvas.x,
-                y: canvas.height - 1,
-                width: canvas.width,
+            let bar = Window {
+                cui: wnd.cui,
+                x: wnd.x,
+                y: wnd.height - 1,
+                width: wnd.width,
                 height: 1,
             };
             self.draw_keybar(&bar);
@@ -160,31 +159,31 @@ impl View {
     }
 
     /// Print offsets.
-    fn draw_offsets(&self, canvas: &Canvas, start: u64, end: u64, step: usize, current: u64) {
-        canvas.color_on(Color::OffsetNormal);
-        for y in 0..canvas.height {
+    fn draw_offsets(&self, wnd: &Window, start: u64, end: u64, step: usize, current: u64) {
+        wnd.color_on(Color::OffsetNormal);
+        for y in 0..wnd.height {
             let offset = start + (y * step) as u64;
             if offset > end {
                 break;
             }
-            canvas.print(0, y, &format!("{:0w$x}", offset, w = canvas.width));
+            wnd.print(0, y, &format!("{:0w$x}", offset, w = wnd.width));
             if current >= offset && current < offset + step as u64 {
-                canvas.color(0, y, canvas.width, Color::OffsetHi);
+                wnd.color(0, y, wnd.width, Color::OffsetHi);
             }
         }
     }
 
     /// Print hex dump.
-    fn draw_hexdump(&self, canvas: &Canvas, page: &PageData, cursor_x: usize, cursor_y: usize) {
-        let columns = (canvas.width + View::WORD_MARGIN) / View::WORD_LENGTH * View::BYTES_IN_WORD;
-        for y in 0..canvas.height {
+    fn draw_hexdump(&self, wnd: &Window, page: &PageData, cursor_x: usize, cursor_y: usize) {
+        let columns = (wnd.width + View::WORD_MARGIN) / View::WORD_LENGTH * View::BYTES_IN_WORD;
+        for y in 0..wnd.height {
             // line background
             let color = if y == cursor_y {
                 Color::HexHi
             } else {
                 Color::HexNormal
             };
-            canvas.color(0, y, canvas.width, color);
+            wnd.color(0, y, wnd.width, color);
 
             for x in 0..columns {
                 let offset = page.offset + (y * columns + x) as u64;
@@ -214,17 +213,17 @@ impl View {
                     )
                 };
                 let pos_x = x * (View::BYTES_IN_WORD - 1) + x / View::BYTES_IN_WORD;
-                canvas.print(pos_x, y, &text);
-                canvas.color(pos_x, y, View::HEX_LEN, color);
+                wnd.print(pos_x, y, &text);
+                wnd.color(pos_x, y, View::HEX_LEN, color);
             }
         }
     }
 
     /// Print ASCII text.
-    fn draw_ascii(&self, canvas: &Canvas, page: &PageData, cursor_x: usize, cursor_y: usize) {
-        for y in 0..canvas.height {
-            for x in 0..canvas.width {
-                let offset = page.offset + (y * canvas.width + x) as u64;
+    fn draw_ascii(&self, wnd: &Window, page: &PageData, cursor_x: usize, cursor_y: usize) {
+        for y in 0..wnd.height {
+            for x in 0..wnd.width {
+                let offset = page.offset + (y * wnd.width + x) as u64;
                 let (chr, color) = if let Some((byte, state)) = page.get(offset) {
                     (
                         View::CP437[byte as usize],
@@ -251,14 +250,14 @@ impl View {
                     )
                 };
                 let text = format!("{}", chr);
-                canvas.print(x, y, &text);
-                canvas.color(x, y, 1, color);
+                wnd.print(x, y, &text);
+                wnd.color(x, y, 1, color);
             }
         }
     }
 
     /// Draw status bar.
-    fn draw_statusbar(&self, canvas: &Canvas, page: &PageData, file: &File, cursor: &Cursor) {
+    fn draw_statusbar(&self, wnd: &Window, page: &PageData, file: &File, cursor: &Cursor) {
         // right part: position, current value, etc
         let (value, _) = page.get(cursor.offset).unwrap();
         let percent = (cursor.offset * 100 / (file.size - 1)) as u8;
@@ -269,25 +268,25 @@ impl View {
             percent = percent,
             ch = if file.is_modified() {'*'} else {' '}
         );
-        canvas.print(canvas.width - stat.len(), 0, &stat);
+        wnd.print(wnd.width - stat.len(), 0, &stat);
 
         // left part: file name
-        let max_len = canvas.width - stat.len();
+        let max_len = wnd.width - stat.len();
         if file.name.len() <= max_len {
-            canvas.print(0, 0, &file.name);
+            wnd.print(0, 0, &file.name);
         } else {
             let mut name = String::from(&file.name[..3]);
             name.push('…');
             let vs = file.name.len() - max_len + 4;
             name.push_str(&file.name[vs..]);
-            canvas.print(0, 0, &name);
+            wnd.print(0, 0, &name);
         }
 
-        canvas.color(0, 0, canvas.width, Color::StatusBar);
+        wnd.color(0, 0, wnd.width, Color::StatusBar);
     }
 
     /// Draw key bar (bottom Fn line).
-    fn draw_keybar(&self, canvas: &Canvas) {
+    fn draw_keybar(&self, wnd: &Window) {
         let titles = &[
             "Help",                                           // F1
             "Save",                                           // F2
@@ -302,14 +301,14 @@ impl View {
         ];
 
         let fn_id_len: usize = 2; // function number length (f1-f0)
-        let width = canvas.width / 10;
+        let width = wnd.width / 10;
         for i in 0..10 {
             let x_num = i * width;
-            canvas.print(x_num, 0, &format!("{:>2}", i + 1));
-            canvas.color(x_num, 0, fn_id_len, Color::KeyBarId);
+            wnd.print(x_num, 0, &format!("{:>2}", i + 1));
+            wnd.color(x_num, 0, fn_id_len, Color::KeyBarId);
             let x_label = x_num + fn_id_len;
-            canvas.print(x_label, 0, titles[i as usize]);
-            canvas.color(x_label, 0, width - fn_id_len, Color::KeyBarTitle);
+            wnd.print(x_label, 0, titles[i as usize]);
+            wnd.color(x_label, 0, width - fn_id_len, Color::KeyBarTitle);
         }
     }
 

@@ -7,7 +7,7 @@ use unicode_segmentation::UnicodeSegmentation;
 /// Widget interface.
 pub trait Widget {
     /// Draw widget, returns cursor position in the line.
-    fn draw(&self, focused: bool, enabled: bool, canvas: &Canvas) -> Option<usize>;
+    fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize>;
 
     /// Check if widget is focusable.
     fn focusable(&self) -> bool {
@@ -51,8 +51,8 @@ impl Text {
 }
 
 impl Widget for Text {
-    fn draw(&self, _focused: bool, _enabled: bool, canvas: &Canvas) -> Option<usize> {
-        canvas.print(0, 0, &self.text);
+    fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
+        wnd.print(0, 0, &self.text);
         None
     }
 }
@@ -72,18 +72,18 @@ impl Border {
 }
 
 impl Widget for Border {
-    fn draw(&self, _focused: bool, _enabled: bool, canvas: &Canvas) -> Option<usize> {
+    fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
         // top
-        let border = format!("╔{:═^1$}╗", &self.title, canvas.width - 2);
-        canvas.print(0, 0, &border);
+        let border = format!("╔{:═^1$}╗", &self.title, wnd.width - 2);
+        wnd.print(0, 0, &border);
         // bottom
-        let line = (0..canvas.width - 2).map(|_| "═").collect::<String>();
+        let line = (0..wnd.width - 2).map(|_| "═").collect::<String>();
         let border = String::from("╚") + &line + "╝";
-        canvas.print(0, canvas.height - 1, &border);
+        wnd.print(0, wnd.height - 1, &border);
         // left/right
-        for y in 1..canvas.height - 1 {
-            canvas.print(0, y, "║");
-            canvas.print(canvas.width - 1, y, "║");
+        for y in 1..wnd.height - 1 {
+            wnd.print(0, y, "║");
+            wnd.print(wnd.width - 1, y, "║");
         }
         None
     }
@@ -107,9 +107,9 @@ impl Separator {
 }
 
 impl Widget for Separator {
-    fn draw(&self, _focused: bool, _enabled: bool, canvas: &Canvas) -> Option<usize> {
-        let line = format!("╟{:─^1$}╢", &self.title, canvas.width - 2);
-        canvas.print(0, 0, &line);
+    fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
+        let line = format!("╟{:─^1$}╢", &self.title, wnd.width - 2);
+        wnd.print(0, 0, &line);
         None
     }
 }
@@ -157,12 +157,12 @@ impl Button {
 }
 
 impl Widget for Button {
-    fn draw(&self, focused: bool, enabled: bool, canvas: &Canvas) -> Option<usize> {
-        canvas.print(0, 0, &self.text);
+    fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize> {
+        wnd.print(0, 0, &self.text);
         if focused {
-            canvas.color(0, 0, self.text.len(), Color::ItemFocused);
+            wnd.color(0, 0, self.text.len(), Color::ItemFocused);
         } else if !enabled {
-            canvas.color(0, 0, self.text.len(), Color::ItemDisabled);
+            wnd.color(0, 0, self.text.len(), Color::ItemDisabled);
         }
         None
     }
@@ -190,13 +190,13 @@ impl Checkbox {
 }
 
 impl Widget for Checkbox {
-    fn draw(&self, focused: bool, enabled: bool, canvas: &Canvas) -> Option<usize> {
+    fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize> {
         let text = format!("[{}] {}", if self.state { 'X' } else { ' ' }, self.title);
-        canvas.print(0, 0, &text);
+        wnd.print(0, 0, &text);
         if focused {
-            canvas.color(0, 0, 3, Color::ItemFocused);
+            wnd.color(0, 0, 3, Color::ItemFocused);
         } else if !enabled {
-            canvas.color(0, 0, 3, Color::ItemDisabled);
+            wnd.color(0, 0, 3, Color::ItemDisabled);
         }
         if focused {
             Some(1)
@@ -366,15 +366,15 @@ impl Edit {
 }
 
 impl Widget for Edit {
-    fn draw(&self, focused: bool, _enabled: bool, canvas: &Canvas) -> Option<usize> {
+    fn draw(&self, focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
         // get substring to display
         let visible_end = self.start + std::cmp::min(self.length() - self.start, self.width);
         let start = self.char2byte(self.start);
         let end = self.char2byte(visible_end);
         let substr = &self.value[start..end];
 
-        canvas.print(0, 0, substr);
-        canvas.color(
+        wnd.print(0, 0, substr);
+        wnd.color(
             0,
             0,
             self.width,
@@ -386,7 +386,7 @@ impl Widget for Edit {
         );
         if focused {
             if self.selection {
-                canvas.color(0, 0, self.cursor, Color::EditSelection);
+                wnd.color(0, 0, self.cursor, Color::EditSelection);
             }
             Some(self.cursor - self.start)
         } else {

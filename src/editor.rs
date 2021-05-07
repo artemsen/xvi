@@ -44,7 +44,8 @@ impl Editor {
             place: Place::Hex,
         };
         let history = History::new();
-        Ok(Self {
+
+        let mut instance = Self {
             cursor,
             cui,
             file,
@@ -58,12 +59,24 @@ impl Editor {
             last_goto: history.last_goto,
             search: Search::new(history.last_search),
             exit: false,
-        })
+        };
+
+        instance.move_cursor(Location::Absolute(
+            if let Some(offset) = History::new().get_last_pos(&instance.file.name) {
+                offset
+            } else {
+                0
+            },
+        ));
+
+        Ok(instance)
     }
 
     /// Run editor.
-    pub fn run(&mut self, offset: u64) {
-        self.move_cursor(Location::Absolute(offset));
+    pub fn run(&mut self, offset: Option<u64>) {
+        if let Some(offset) = offset {
+            self.move_cursor(Location::Absolute(offset));
+        }
         while !self.exit {
             // redraw
             self.draw();
@@ -414,7 +427,7 @@ impl Editor {
         } else {
             false
         };
-        if self.exit && self.cursor.offset != 0 {
+        if self.exit {
             let mut history = History::new();
             history.set_last_pos(&self.file.name, self.cursor.offset);
             history.last_goto = self.last_goto;
@@ -430,7 +443,6 @@ impl Editor {
         let new_base = self
             .cursor
             .move_to(loc, self.page.offset, self.file.size, rows, columns);
-        let new_base = new_base - new_base % columns as u64;
         let data = self.file.get(new_base, rows * columns).unwrap();
         self.page = PageData::new(new_base, data);
         self.page.update(&self.file.get_modified());
@@ -466,16 +478,14 @@ impl Editor {
     /// Draw editor.
     fn draw(&self) {
         let (width, height) = self.cui.size();
-        let canvas = Canvas {
+        let wnd = Window {
             cui: self.cui.as_ref(),
             x: 0,
             y: 0,
             width,
             height,
         };
-        let (x_cursor, y_cursor) = self
-            .view
-            .draw(&canvas, &self.page, &self.cursor, &self.file);
-        canvas.show_cursor(x_cursor, y_cursor);
+        let (x_cursor, y_cursor) = self.view.draw(&wnd, &self.page, &self.cursor, &self.file);
+        wnd.show_cursor(x_cursor, y_cursor);
     }
 }
