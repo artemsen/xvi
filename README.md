@@ -3,11 +3,13 @@
 Yet another hex editor.
 
 ![Screenshot](https://raw.githubusercontent.com/artemsen/xvi/master/.github/screenshot1.png)
+
 ![Screenshot](https://raw.githubusercontent.com/artemsen/xvi/master/.github/screenshot2.png)
 
-- Search;
-- Jump to address;
-- Customizable UI color.
+- Undo/redo;
+- Searching;
+- Highlighting the current position and changed data;
+- Customizable UI.
 
 ## Build and install
 
