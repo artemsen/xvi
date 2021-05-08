@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::cui::*;
 use super::dialog::*;
 use super::widget::*;
 use std::collections::BTreeMap;
 
 /// Message box dialog.
 pub struct MessageBox {
-    /// Message text: string and align flag
+    /// Message text: string and align flag.
     message: Vec<(String, bool)>,
-    /// Buttons: type and default state
+    /// Buttons: type and default state.
     buttons: Vec<(StdButton, bool)>,
-    /// Message type
+    /// Message type.
     dtype: DialogType,
 }
 
@@ -45,7 +44,7 @@ impl MessageBox {
     }
 
     /// Show message box dialog.
-    pub fn show(&self, cui: &dyn Cui) -> Option<StdButton> {
+    pub fn show(&self) -> Option<StdButton> {
         let mut dlg = Dialog::new(self.dtype);
 
         // calculate buttons line width
@@ -102,7 +101,7 @@ impl MessageBox {
             x += width + 1;
         }
 
-        if let Some(id) = dlg.run(cui) {
+        if let Some(id) = dlg.run() {
             return Some(*button_ids.get(&id).unwrap());
         }
         None

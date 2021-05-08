@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::cui::*;
 use super::dialog::*;
 use super::widget::*;
 
@@ -23,7 +22,7 @@ impl Search {
     }
 
     /// Show "Find" dialog.
-    pub fn dialog(&mut self, cui: &dyn Cui) -> bool {
+    pub fn dialog(&mut self) -> bool {
         let mut init = String::with_capacity(self.data.len() * 2);
         for byte in self.data.iter() {
             init.push_str(&format!("{:02x}", byte));
@@ -75,7 +74,7 @@ impl Search {
 
         dlg.apply(hex);
 
-        if let Some(id) = dlg.run(cui) {
+        if let Some(id) = dlg.run() {
             if id != btn_cancel {
                 match dlg.get(hex) {
                     WidgetData::Text(value) => {

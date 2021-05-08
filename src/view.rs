@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::cui::*;
+use super::curses::{Color, Curses, Window};
 use super::cursor::*;
-use super::file::*;
+use super::file::File;
 use super::page::*;
 
 /// Document view.
@@ -90,7 +90,6 @@ impl View {
         // status bar
         if self.statusbar {
             let bar = Window {
-                cui: wnd.cui,
                 x: wnd.x,
                 y: wnd.y,
                 width: wnd.width,
@@ -101,7 +100,6 @@ impl View {
 
         // offsets (addresses)
         let offset = Window {
-            cui: wnd.cui,
             x: wnd.x,
             y: wnd.y + if self.statusbar { 1 } else { 0 },
             width: offsets,
@@ -111,7 +109,6 @@ impl View {
 
         // hex dump
         let hex = Window {
-            cui: wnd.cui,
             x: offset.x + offset.width + View::HEX_MARGIN,
             y: wnd.y + if self.statusbar { 1 } else { 0 },
             width: columns / View::BYTES_IN_WORD * View::WORD_LENGTH - View::WORD_MARGIN,
@@ -131,7 +128,6 @@ impl View {
         // ascii data
         if self.ascii {
             let ascii = Window {
-                cui: wnd.cui,
                 x: hex.x + hex.width + View::HEX_MARGIN,
                 y: wnd.y + if self.statusbar { 1 } else { 0 },
                 width: columns,
@@ -146,7 +142,6 @@ impl View {
         // key bar
         if self.keybar {
             let bar = Window {
-                cui: wnd.cui,
                 x: wnd.x,
                 y: wnd.height - 1,
                 width: wnd.width,
@@ -160,7 +155,7 @@ impl View {
 
     /// Print offsets.
     fn draw_offsets(&self, wnd: &Window, start: u64, end: u64, step: usize, current: u64) {
-        wnd.color_on(Color::OffsetNormal);
+        Curses::color_on(Color::OffsetNormal);
         for y in 0..wnd.height {
             let offset = start + (y * step) as u64;
             if offset > end {

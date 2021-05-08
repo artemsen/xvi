@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::cui::*;
 use super::dialog::*;
 use super::widget::*;
 
@@ -10,7 +9,7 @@ pub struct GotoDialog;
 
 impl GotoDialog {
     /// Show "Go to" dialog, return absolute address to jump.
-    pub fn show(cui: &dyn Cui, default: u64, current: u64) -> Option<u64> {
+    pub fn show(default: u64, current: u64) -> Option<u64> {
         let width = 44;
         let mut dlg = Dialog::new(DialogType::Normal);
         dlg.add(0, 0, width + 4, 8, Border::new("Go to"));
@@ -69,7 +68,7 @@ impl GotoDialog {
 
         dlg.apply(abshex);
 
-        if let Some(id) = dlg.run(cui) {
+        if let Some(id) = dlg.run() {
             if id != btn_cancel {
                 if let WidgetData::Text(value) = dlg.get(abshex) {
                     return match u64::from_str_radix(&value, 16) {

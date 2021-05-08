@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::cui::*;
 use super::dialog::*;
 use super::widget::*;
 
@@ -10,7 +9,7 @@ pub struct SaveAsDialog;
 
 impl SaveAsDialog {
     /// Show "Save As" dialog, returns new file path.
-    pub fn show(cui: &dyn Cui, default: String) -> Option<String> {
+    pub fn show(default: String) -> Option<String> {
         let width = 40;
         let mut dlg = Dialog::new(DialogType::Normal);
         dlg.add(0, 0, width + 4, 6, Border::new("Save as"));
@@ -36,7 +35,7 @@ impl SaveAsDialog {
 
         dlg.apply(name);
 
-        if let Some(id) = dlg.run(cui) {
+        if let Some(id) = dlg.run() {
             if id != btn_cancel {
                 if let WidgetData::Text(value) = dlg.get(name) {
                     return Some(value);

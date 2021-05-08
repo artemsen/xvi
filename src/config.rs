@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::cui::*;
-use super::inifile::*;
+use super::curses::Color;
+use super::inifile::IniFile;
 use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::cui::*;
+//use super::config::Config;
+use super::curses::*;
 use super::cursor::*;
 use super::dialog::*;
 use super::file::*;
@@ -16,8 +17,6 @@ use super::widget::*;
 
 /// Editor: implements business logic of a hex editor.
 pub struct Editor {
-    /// Console UI (curses).
-    cui: Box<dyn Cui>,
     /// Edited file.
     file: File,
     /// Currently loaded and edited data.
@@ -36,7 +35,7 @@ pub struct Editor {
 
 impl Editor {
     /// Create new editor instance.
-    pub fn new(cui: Box<dyn Cui>, path: &str) -> Result<Self, std::io::Error> {
+    pub fn new(path: &str) -> Result<Self, std::io::Error> {
         let file = File::open(path)?;
         let cursor = Cursor {
             offset: u64::MAX,
@@ -47,7 +46,6 @@ impl Editor {
 
         let mut instance = Self {
             cursor,
-            cui,
             file,
             page: PageData::new(u64::MAX, Vec::new()),
             view: View {
@@ -82,9 +80,9 @@ impl Editor {
             self.draw();
 
             // handle next event
-            match self.cui.poll_event() {
+            match Curses::poll_event() {
                 Event::TerminalResize => {
-                    self.cui.clear();
+                    Curses::clear_screen();
                     self.move_cursor(Location::Absolute(self.cursor.offset));
                 }
                 Event::KeyPress(key) => {
@@ -110,7 +108,7 @@ impl Editor {
                 true
             }
             Key::F(3) => {
-                self.cui.clear();
+                Curses::clear_screen();
                 self.view.fixed_width = !self.view.fixed_width;
                 self.move_cursor(Location::Absolute(self.cursor.offset));
                 true
@@ -302,7 +300,7 @@ impl Editor {
             .left("")
             .center("Read `man xvi` for more info.")
             .button(StdButton::Ok, true)
-            .show(self.cui.as_ref());
+            .show();
     }
 
     /// Save current file, returns false if operation failed.
@@ -320,7 +318,7 @@ impl Editor {
                         .center(&format!("{}", err))
                         .button(StdButton::Retry, true)
                         .button(StdButton::Cancel, false)
-                        .show(self.cui.as_ref())
+                        .show()
                     {
                         if btn != StdButton::Retry {
                             return false;
@@ -336,7 +334,7 @@ impl Editor {
 
     /// Save current file with new name, returns false if operation failed.
     fn save_as(&mut self) -> bool {
-        if let Some(new_name) = SaveAsDialog::show(self.cui.as_ref(), self.file.name.clone()) {
+        if let Some(new_name) = SaveAsDialog::show(self.file.name.clone()) {
             loop {
                 match self.file.save_as(new_name.clone()) {
                     Ok(()) => {
@@ -350,7 +348,7 @@ impl Editor {
                             .center(&format!("{}", err))
                             .button(StdButton::Retry, true)
                             .button(StdButton::Cancel, false)
-                            .show(self.cui.as_ref())
+                            .show()
                         {
                             if btn != StdButton::Retry {
                                 return false;
@@ -369,7 +367,7 @@ impl Editor {
     /// Goto to specified address.
     fn goto(&mut self) {
         if let Some(offset) =
-            GotoDialog::show(self.cui.as_ref(), self.last_goto, self.cursor.offset)
+            GotoDialog::show(self.last_goto, self.cursor.offset)
         {
             self.move_cursor(Location::Absolute(offset));
             self.last_goto = offset;
@@ -378,7 +376,7 @@ impl Editor {
 
     /// Find position of the sequence.
     fn find(&mut self) {
-        if self.search.dialog(self.cui.as_ref()) {
+        if self.search.dialog() {
             self.draw();
             self.find_next(self.search.backward);
         }
@@ -398,7 +396,7 @@ impl Editor {
             MessageBox::new("Search", DialogType::Error)
                 .center("Sequence not found!")
                 .button(StdButton::Ok, true)
-                .show(self.cui.as_ref());
+                .show();
         }
     }
 
@@ -413,7 +411,7 @@ impl Editor {
             .button(StdButton::Yes, false)
             .button(StdButton::No, false)
             .button(StdButton::Cancel, true)
-            .show(self.cui.as_ref())
+            .show()
         {
             match btn {
                 StdButton::Yes => {
@@ -438,7 +436,7 @@ impl Editor {
 
     /// Move cursor.
     fn move_cursor(&mut self, loc: Location) {
-        let (width, height) = self.cui.size();
+        let (width, height) = Curses::screen_size();
         let (rows, columns, _) = self.view.get_scheme(width, height, self.file.size);
         let new_base = self
             .cursor
@@ -477,9 +475,8 @@ impl Editor {
 
     /// Draw editor.
     fn draw(&self) {
-        let (width, height) = self.cui.size();
+        let (width, height) = Curses::screen_size();
         let wnd = Window {
-            cui: self.cui.as_ref(),
             x: 0,
             y: 0,
             width,

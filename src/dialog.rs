@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::cui::*;
-use super::widget::*;
+use super::curses::*;
+use super::widget::{Widget, WidgetData};
 
 /// Dialog window.
 pub struct Dialog {
@@ -84,17 +84,16 @@ impl Dialog {
     }
 
     /// Run dialog: show window and handle external events.
-    pub fn run(&mut self, cui: &dyn Cui) -> Option<ItemId> {
+    pub fn run(&mut self) -> Option<ItemId> {
         let mut rc = None;
 
         // window for the dialog
-        let (screen_width, screen_height) = cui.size();
+        let (scr_width, scr_height) = Curses::screen_size();
         let mut wnd = Window {
-            x: screen_width / 2,
-            y: (screen_height as f32 / 2.5) as usize,
+            x: scr_width / 2,
+            y: (scr_height as f32 / 2.5) as usize,
             width: 0,
             height: 0,
-            cui,
         };
         for item in self.items.iter() {
             let right = item.x + item.width;
@@ -122,7 +121,7 @@ impl Dialog {
             self.draw(&wnd);
 
             // handle next event
-            match cui.poll_event() {
+            match Curses::poll_event() {
                 Event::TerminalResize => {}
                 Event::KeyPress(event) => {
                     match event.key {
@@ -176,14 +175,14 @@ impl Dialog {
                 }
             }
         }
-        cui.clear();
+        Curses::clear_screen();
 
         rc
     }
 
     /// Draw dialog.
     fn draw(&self, wnd: &Window) {
-        wnd.color_on(if self.dtype == DialogType::Normal {
+        Curses::color_on(if self.dtype == DialogType::Normal {
             Color::DialogNormal
         } else {
             Color::DialogError
@@ -191,9 +190,9 @@ impl Dialog {
         self.draw_background(&wnd);
         let cursor = self.draw_items(&wnd);
         if let Some((x, y)) = cursor {
-            wnd.cui.show_cursor(x, y);
+            Curses::show_cursor(x, y);
         } else {
-            wnd.cui.hide_cursor();
+            Curses::hide_cursor();
         }
     }
 
@@ -205,11 +204,9 @@ impl Dialog {
         }
         // shadow, out of window
         for y in (wnd.y + 1)..(wnd.y + wnd.height) {
-            wnd
-                .cui
-                .color(wnd.x + wnd.width, y, 2, Color::DialogShadow);
+            Curses::color(wnd.x + wnd.width, y, 2, Color::DialogShadow);
         }
-        wnd.cui.color(
+        Curses::color(
             wnd.x + 2,
             wnd.y + wnd.height,
             wnd.width,
@@ -222,7 +219,6 @@ impl Dialog {
         let mut cursor: Option<(usize, usize)> = None;
         for (index, item) in self.items.iter().enumerate() {
             let subcan = Window {
-                cui: wnd.cui,
                 x: wnd.x + item.x + Dialog::MARGIN_X,
                 y: wnd.y + item.y + Dialog::MARGIN_Y,
                 width: item.width,

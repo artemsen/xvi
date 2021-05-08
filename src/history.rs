@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::config::*;
-use super::inifile::*;
+use super::config::Config;
+use super::inifile::IniFile;
 use std::env;
 use std::fs;
 use std::path::PathBuf;

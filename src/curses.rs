@@ -1,19 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::config::*;
-use super::cui::*;
+use super::config::Config;
 
 use ncurses as nc;
 
 /// Wrapper around ncurses.
-pub struct Curses {
-    wnd: nc::WINDOW,
-}
-
+pub struct Curses;
 impl Curses {
     /// Initialization.
-    pub fn new() -> Self {
+    pub fn initialize() {
         // setup locale to get UTF-8 support
         nc::setlocale(nc::LcCategory::all, "");
 
@@ -31,15 +27,93 @@ impl Curses {
             nc::init_pair(color as i16, fg as i16, bg as i16);
         }
 
-        nc::wbkgdset(wnd, nc::COLOR_PAIR(Color::HexNormal as i16));
-        nc::wclear(wnd);
-
-        Self { wnd }
+        nc::bkgdset(nc::COLOR_PAIR(Color::HexNormal as i16));
+        nc::clear();
     }
 
     /// Close ncurses.
     pub fn close() {
         nc::endwin();
+    }
+
+    /// Clear the whole screen.
+    pub fn clear_screen() {
+        nc::clear();
+    }
+
+    /// Print text on the window.
+    pub fn print(x: usize, y: usize, text: &str) {
+        nc::mvaddstr(y as i32, x as i32, text);
+    }
+
+    /// Colorize the specified range in line.
+    pub fn color(x: usize, y: usize, width: usize, color: Color) {
+        nc::mvchgat(y as i32, x as i32, width as i32, 0, color as i16);
+    }
+
+    /// Enable color for all further prints.
+    pub fn color_on(color: Color) {
+        nc::attron(nc::COLOR_PAIR(color as i16));
+    }
+
+    /// Show cursor at specified position.
+    pub fn show_cursor(x: usize, y: usize) {
+        nc::mv(y as i32, x as i32);
+        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_VISIBLE);
+    }
+
+    /// Hide cursor.
+    pub fn hide_cursor() {
+        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
+    }
+
+    /// Get screen size (width, height).
+    pub fn screen_size() -> (usize, usize) {
+        let wnd = nc::stdscr();
+        (nc::getmaxx(wnd) as usize, nc::getmaxy(wnd) as usize)
+    }
+
+    /// Poll next event.
+    pub fn poll_event() -> Event {
+        loop {
+            match nc::get_wch() {
+                Some(nc::WchResult::Char(chr)) => {
+                    if chr == 0x1b {
+                        // esc code, read next key - it can be alt+? combination
+                        nc::timeout(10);
+                        let key = nc::get_wch();
+                        nc::timeout(-1);
+                        if let Some(nc::WchResult::Char(chr)) = key {
+                            if let Some(mut key) = Curses::key_from_char(chr) {
+                                key.modifier |= KeyPress::ALT;
+                                return Event::KeyPress(key);
+                            }
+                        }
+                        return Event::KeyPress(KeyPress::new(Key::Esc, KeyPress::NONE));
+                    }
+                    if let Some(key) = Curses::key_from_char(chr) {
+                        return Event::KeyPress(key);
+                    }
+                }
+                Some(nc::WchResult::KeyCode(key)) => match key {
+                    nc::KEY_RESIZE => {
+                        return Event::TerminalResize;
+                    }
+                    _ => {
+                        if let Some(key) = Curses::key_from_code(key) {
+                            return Event::KeyPress(key);
+                        } else {
+                            //let name = match nc::keyname(key) {
+                            //    Some(n) => n,
+                            //    None => String::from("?"),
+                            //};
+                            //println!("Unknown key: {} = 0x{:x} = {}", key, key, name);
+                        }
+                    }
+                },
+                None => {}
+            }
+        }
     }
 
     /// Create instance from ncurses code.
@@ -164,84 +238,108 @@ impl Curses {
     }
 }
 
-impl Drop for Curses {
-    fn drop(&mut self) {
-        Curses::close();
+/// Color identifiers.
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
+pub enum Color {
+    OffsetNormal = 1,
+    OffsetHi,
+    HexNormal,
+    HexHi,
+    HexModified,
+    HexModifiedHi,
+    AsciiNormal,
+    AsciiHi,
+    AsciiModified,
+    AsciiModifiedHi,
+    StatusBar,
+    KeyBarId,
+    KeyBarTitle,
+    DialogNormal,
+    DialogError,
+    DialogShadow,
+    ItemDisabled,
+    ItemFocused,
+    EditNormal,
+    EditFocused,
+    EditSelection,
+}
+
+/// External event.
+pub enum Event {
+    /// Terminal window was resized.
+    TerminalResize,
+    /// Key pressed.
+    KeyPress(KeyPress),
+}
+
+/// Key press event data: code with modifiers.
+pub struct KeyPress {
+    pub key: Key,
+    pub modifier: u8,
+}
+impl KeyPress {
+    pub const NONE: u8 = 0b000;
+    pub const SHIFT: u8 = 0b001;
+    pub const CTRL: u8 = 0b010;
+    pub const ALT: u8 = 0b100;
+
+    pub fn new(key: Key, modifier: u8) -> Self {
+        Self { key, modifier }
     }
 }
 
-impl Cui for Curses {
-    fn print(&self, x: usize, y: usize, text: &str) {
-        nc::mvwaddstr(self.wnd, y as i32, x as i32, text);
+/// Key types.
+#[derive(PartialEq)]
+pub enum Key {
+    // alphanumeric
+    Char(char),
+    // functional buttons (F1, F2, ...)
+    F(u8),
+    // special buttons
+    Left,
+    Right,
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    Home,
+    End,
+    Tab,
+    Backspace,
+    Delete,
+    Enter,
+    Esc,
+}
+
+/// UI Window.
+pub struct Window {
+    // top left corner of the window
+    pub x: usize,
+    pub y: usize,
+    // size of the window
+    pub width: usize,
+    pub height: usize,
+}
+impl Window {
+    /// Print text on the window.
+    pub fn print(&self, x: usize, y: usize, text: &str) {
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+        Curses::print(self.x + x, self.y + y, text);
     }
 
-    fn color(&self, x: usize, y: usize, width: usize, color: Color) {
-        nc::mvwchgat(self.wnd, y as i32, x as i32, width as i32, 0, color as i16);
+    /// Colorize the specified range in line.
+    pub fn color(&self, x: usize, y: usize, width: usize, color: Color) {
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+        debug_assert!(x + width <= self.width);
+        Curses::color(self.x + x, self.y + y, width, color);
     }
 
-    fn color_on(&self, color: Color) {
-        nc::wattron(self.wnd, nc::COLOR_PAIR(color as i16));
-    }
-
-    fn clear(&self) {
-        nc::wclear(self.wnd);
-    }
-
-    fn size(&self) -> (usize, usize) {
-        (
-            nc::getmaxx(self.wnd) as usize,
-            nc::getmaxy(self.wnd) as usize,
-        )
-    }
-
-    fn show_cursor(&self, x: usize, y: usize) {
-        nc::wmove(self.wnd, y as i32, x as i32);
-        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_VISIBLE);
-    }
-
-    fn hide_cursor(&self) {
-        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
-    }
-
-    fn poll_event(&self) -> Event {
-        loop {
-            match nc::wget_wch(self.wnd) {
-                Some(nc::WchResult::Char(chr)) => {
-                    if chr == 0x1b {
-                        // esc code, read next key - it can be alt+? combination
-                        nc::wtimeout(self.wnd, 10);
-                        let key = nc::wget_wch(self.wnd);
-                        nc::wtimeout(self.wnd, -1);
-                        if let Some(nc::WchResult::Char(chr)) = key {
-                            if let Some(mut key) = Curses::key_from_char(chr) {
-                                key.modifier |= KeyPress::ALT;
-                                return Event::KeyPress(key);
-                            }
-                        }
-                        return Event::KeyPress(KeyPress::new(Key::Esc, KeyPress::NONE));
-                    }
-                    if let Some(key) = Curses::key_from_char(chr) {
-                        return Event::KeyPress(key);
-                    }
-                }
-                Some(nc::WchResult::KeyCode(key)) => match key {
-                    nc::KEY_RESIZE => {
-                        return Event::TerminalResize;
-                    }
-                    _ => {
-                        if let Some(key) = Curses::key_from_code(key) {
-                            return Event::KeyPress(key);
-                        } else {
-                            //let name = match nc::keyname(key) {
-                            //    Some(n) => n,
-                            //    None => String::from("?"),
-                            //};
-                            //println!("Unknown key: {} = 0x{:x} = {}", key, key, name);
-                        }
-                    }
-                },
-                None => {}
-            }
-        }
+    /// Show cursor at specified position.
+    pub fn show_cursor(&self, x: usize, y: usize) {
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+        Curses::show_cursor(self.x + x, self.y + y);
     }
 }

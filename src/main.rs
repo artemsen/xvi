@@ -2,7 +2,6 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 mod config;
-mod cui;
 mod curses;
 mod cursor;
 mod dialog;
@@ -17,7 +16,8 @@ mod saveas;
 mod search;
 mod view;
 mod widget;
-use config::*;
+
+use config::Config;
 use curses::Curses;
 use editor::Editor;
 use std::collections::HashMap;
@@ -96,9 +96,12 @@ fn main() {
         default_panic(info);
     }));
 
-    let cui = Box::new(Curses::new());
+    Curses::initialize();
+
+    // set window title
     println!("\x1b]0;XVI: {}\x07", file);
-    let mut editor = match Editor::new(cui, &file) {
+
+    let mut editor = match Editor::new(&file) {
         Ok(editor) => editor,
         Err(err) => {
             eprintln!("{}: {}", err, &file);
@@ -106,6 +109,8 @@ fn main() {
         }
     };
     editor.run(offset);
+
+    Curses::close();
 }
 
 /// Parse command line arguments.
