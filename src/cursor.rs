@@ -175,14 +175,18 @@ impl Cursor {
                 self.half = HalfByte::Left;
             }
             Location::FileEnd => {
-                new_base = max - page_size;
-                let align = max % cols as u64;
-                new_base -= align;
-                if align != 0 {
-                    new_base += cols as u64;
-                }
                 self.offset = max - 1;
                 self.half = HalfByte::Left;
+                if page_size > max {
+                    new_base = 0;
+                } else {
+                    new_base = max - page_size;
+                    let align = max % cols as u64;
+                    new_base -= align;
+                    if align != 0 {
+                        new_base += cols as u64;
+                    }
+                }
             }
             Location::Absolute(offset) => {
                 self.offset = if offset < max { offset } else { max - 1 };
