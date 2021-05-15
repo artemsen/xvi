@@ -12,7 +12,7 @@ use super::messagebox::*;
 use super::page::*;
 use super::saveas::*;
 use super::search::*;
-use super::view::*;
+use super::view;
 use super::widget::*;
 
 /// Editor: implements business logic of a hex editor.
@@ -21,8 +21,8 @@ pub struct Editor {
     file: File,
     /// Currently loaded and edited data.
     page: PageData,
-    /// View of the currently edited (visible) data.
-    view: View,
+    /// Configuration of the view mode.
+    view_cfg: view::Config,
     /// Cursor position.
     cursor: Cursor,
     /// Last used "goto" address.
@@ -48,7 +48,7 @@ impl Editor {
             cursor,
             file,
             page: PageData::new(u64::MAX, Vec::new()),
-            view: View {
+            view_cfg: view::Config {
                 fixed_width: false,
                 ascii: true,
                 statusbar: true,
@@ -109,7 +109,7 @@ impl Editor {
             }
             Key::F(3) => {
                 Curses::clear_screen();
-                self.view.fixed_width = !self.view.fixed_width;
+                self.view_cfg.fixed_width = !self.view_cfg.fixed_width;
                 self.move_cursor(Location::Absolute(self.cursor.offset));
                 true
             }
@@ -366,9 +366,7 @@ impl Editor {
 
     /// Goto to specified address.
     fn goto(&mut self) {
-        if let Some(offset) =
-            GotoDialog::show(self.last_goto, self.cursor.offset)
-        {
+        if let Some(offset) = GotoDialog::show(self.last_goto, self.cursor.offset) {
             self.move_cursor(Location::Absolute(offset));
             self.last_goto = offset;
         }
@@ -437,11 +435,28 @@ impl Editor {
     /// Move cursor.
     fn move_cursor(&mut self, loc: Location) {
         let (width, height) = Curses::screen_size();
-        let (rows, columns, _) = self.view.get_scheme(width, height, self.file.size);
-        let new_base = self
-            .cursor
-            .move_to(loc, self.page.offset, self.file.size, rows, columns);
-        let data = self.file.get(new_base, rows * columns).unwrap();
+
+        let scheme = view::Scheme::new(
+            &Window {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            },
+            &self.view_cfg,
+            self.file.size,
+        );
+        let new_base = self.cursor.move_to(
+            loc,
+            self.page.offset,
+            self.file.size,
+            scheme.rows,
+            scheme.columns,
+        );
+        let data = self
+            .file
+            .get(new_base, scheme.rows * scheme.columns)
+            .unwrap();
         self.page = PageData::new(new_base, data);
         self.page.update(&self.file.get_modified());
     }
@@ -482,7 +497,22 @@ impl Editor {
             width,
             height,
         };
-        let (x_cursor, y_cursor) = self.view.draw(&wnd, &self.page, &self.cursor, &self.file);
+        let scheme = view::Scheme::new(&wnd, &self.view_cfg, self.file.size);
+        let view = view::View {
+            scheme: &scheme,
+            config: &self.view_cfg,
+            page: &self.page,
+            file: &self.file,
+            offset: self.cursor.offset,
+        };
+
+        view.draw();
+        let (x_cursor, y_cursor) = scheme.position(
+            self.page.offset,
+            self.cursor.offset,
+            self.cursor.place == Place::Hex,
+            self.cursor.half == HalfByte::Left,
+        );
         wnd.show_cursor(x_cursor, y_cursor);
     }
 }
