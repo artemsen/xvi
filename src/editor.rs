@@ -111,6 +111,7 @@ impl Editor {
                 Curses::clear_screen();
                 if key.modifier == KeyPress::SHIFT {
                     self.view_cfg.ascii = !self.view_cfg.ascii;
+                    self.cursor.place = Place::Hex;
                 } else {
                     self.view_cfg.fixed_width = !self.view_cfg.fixed_width;
                 }
@@ -136,7 +137,9 @@ impl Editor {
                 true
             }
             Key::Tab => {
-                self.cursor.switch_place();
+                if self.view_cfg.ascii {
+                    self.cursor.switch_place();
+                }
                 true
             }
             Key::Left => {
