@@ -28,31 +28,29 @@ impl IniFile {
         let mut instance = IniFile::new();
         let mut last_section = String::new();
 
-        for it in BufReader::new(ini).lines() {
-            if let Ok(line) = it {
-                let line = line.trim();
-                // skip comments and empty lines
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
-                // section name
-                if line.starts_with('[') && line.ends_with(']') {
-                    last_section = String::from(&line[1..line.len() - 1]).to_lowercase();
-                    continue;
-                }
-                // key = value
-                let split: Vec<&str> = line.splitn(2, '=').collect();
-                if split.len() != 2 {
-                    println!("WARNING: Invalid config: {}", line);
-                } else {
-                    let key = String::from(split[0].trim()).to_lowercase();
-                    let value = String::from(split[1].trim());
-                    instance
-                        .sections
-                        .entry(last_section.clone())
-                        .or_insert_with(BTreeMap::new)
-                        .insert(key, value);
-                }
+        for line in BufReader::new(ini).lines().flatten() {
+            let line = line.trim();
+            // skip comments and empty lines
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            // section name
+            if line.starts_with('[') && line.ends_with(']') {
+                last_section = String::from(&line[1..line.len() - 1]).to_lowercase();
+                continue;
+            }
+            // key = value
+            let split: Vec<&str> = line.splitn(2, '=').collect();
+            if split.len() != 2 {
+                println!("WARNING: Invalid config: {}", line);
+            } else {
+                let key = String::from(split[0].trim()).to_lowercase();
+                let value = String::from(split[1].trim());
+                instance
+                    .sections
+                    .entry(last_section.clone())
+                    .or_insert_with(BTreeMap::new)
+                    .insert(key, value);
             }
         }
 

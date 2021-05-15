@@ -61,7 +61,7 @@ impl Config {
         if let Ok(ini) = IniFile::load(file) {
             let mut cfg = Config::default();
             if let Some(val) = ini.get(Config::HISTORY, "filepos") {
-                if let Ok(val) = usize::from_str_radix(val, 10) {
+                if let Ok(val) = val.parse::<usize>() {
                     cfg.filepos = val;
                 }
             }
@@ -115,8 +115,8 @@ impl Config {
             };
             let split: Vec<&str> = val.splitn(2, ',').collect();
             if split.len() == 2 {
-                if let Ok(fg) = u8::from_str_radix(split[0].trim(), 10) {
-                    if let Ok(bg) = u8::from_str_radix(split[1].trim(), 10) {
+                if let Ok(fg) = split[0].trim().parse::<u8>() {
+                    if let Ok(bg) = split[1].trim().parse::<u8>() {
                         self.colors.insert(id, (fg, bg));
                     }
                 }
