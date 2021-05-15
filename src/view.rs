@@ -233,12 +233,12 @@ impl<'a> View<'a> {
                     (
                         format!("{:02x}", byte),
                         if state & PageData::CHANGED != 0 {
-                            if curr_y == y || curr_x == x {
+                            if y == curr_y || x == curr_x {
                                 Color::HexModifiedHi
                             } else {
                                 Color::HexModified
                             }
-                        } else if curr_y == y || curr_x == x {
+                        } else if y == curr_y || x == curr_x {
                             Color::HexHi
                         } else {
                             Color::HexNormal
@@ -247,7 +247,7 @@ impl<'a> View<'a> {
                 } else {
                     (
                         String::from("  "),
-                        if curr_y == y || curr_x == x {
+                        if y == curr_y || x == curr_x {
                             Color::HexHi
                         } else {
                             Color::HexNormal
@@ -272,12 +272,12 @@ impl<'a> View<'a> {
                     (
                         View::CP437[byte as usize],
                         if state & PageData::CHANGED != 0 {
-                            if curr_y == y || curr_x == x {
+                            if y == curr_y || x == curr_x {
                                 Color::AsciiModifiedHi
                             } else {
                                 Color::AsciiModified
                             }
-                        } else if curr_y == y || curr_x == x {
+                        } else if y == curr_y || x == curr_x {
                             Color::AsciiHi
                         } else {
                             Color::AsciiNormal
@@ -286,7 +286,7 @@ impl<'a> View<'a> {
                 } else {
                     (
                         ' ',
-                        if curr_y == y || curr_x == x {
+                        if y == curr_y || x == curr_x {
                             Color::AsciiHi
                         } else {
                             Color::AsciiNormal

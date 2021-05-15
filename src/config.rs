@@ -20,7 +20,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let mut colors = BTreeMap::new();
-        for &(id, fg, bg) in Config::LIGHT_THEME {
+        for &(id, fg, bg) in Config::DARK_THEME {
             colors.insert(id, (fg, bg));
         }
         Self {
@@ -67,12 +67,12 @@ impl Config {
             }
             if let Some(val) = ini.get(Config::COLORS, "theme") {
                 match val.to_lowercase().as_str() {
-                    "dark" => {
-                        for &(id, fg, bg) in Config::DARK_THEME {
+                    "light" => {
+                        for &(id, fg, bg) in Config::LIGHT_THEME {
                             cfg.colors.insert(id, (fg, bg));
                         }
                     }
-                    "light" => { /* already set by default */ }
+                    "dark" => { /* already set by default */ }
                     _ => {}
                 };
             }
