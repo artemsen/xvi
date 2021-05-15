@@ -109,7 +109,11 @@ impl Editor {
             }
             Key::F(3) => {
                 Curses::clear_screen();
-                self.view_cfg.fixed_width = !self.view_cfg.fixed_width;
+                if key.modifier == KeyPress::SHIFT {
+                    self.view_cfg.ascii = !self.view_cfg.ascii;
+                } else {
+                    self.view_cfg.fixed_width = !self.view_cfg.fixed_width;
+                }
                 self.move_cursor(Location::Absolute(self.cursor.offset));
                 true
             }
