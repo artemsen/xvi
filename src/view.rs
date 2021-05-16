@@ -406,19 +406,17 @@ impl<'a> View<'a> {
             "Exit", // F10
         ];
 
-        let fn_id_len: usize = 2; // function number length (f1-f0)
         let width = self.scheme.keybar.width / 10;
         for i in 0..10 {
-            let x_num = i * width;
-            self.scheme.keybar.print(x_num, 0, &format!("{:>2}", i + 1));
-            self.scheme
-                .keybar
-                .color(x_num, 0, fn_id_len, Color::KeyBarId);
-            let x_label = x_num + fn_id_len;
-            self.scheme.keybar.print(x_label, 0, titles[i as usize]);
-            self.scheme
-                .keybar
-                .color(x_label, 0, width - fn_id_len, Color::KeyBarTitle);
+            let x = i * width;
+            let text = format!("{:>2}{}", i + 1, titles[i as usize]);
+            self.scheme.keybar.print(x, 0, &text);
+        }
+        self.scheme
+            .keybar
+            .color(0, 0, self.scheme.keybar.width, Color::KeyBarTitle);
+        for i in 0..10 {
+            self.scheme.keybar.color(i * width, 0, 2, Color::KeyBarId);
         }
     }
 }
