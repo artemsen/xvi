@@ -8,202 +8,6 @@ use super::file::File;
 use super::page::PageData;
 use super::widget::*;
 
-/// Configuration of the view.
-#[derive(Clone)]
-pub struct Config {
-    /// Line width mode (fixed/dynamic).
-    pub fixed_width: bool,
-    /// Show/hide ascii field.
-    pub ascii: bool,
-    /// Show/hide status bar.
-    pub statusbar: bool,
-    /// Show/hide key bar.
-    pub keybar: bool,
-}
-impl Config {
-    pub fn new() -> Self {
-        let cfg = config::Config::get();
-        Self {
-            fixed_width: cfg.fixed_width,
-            ascii: cfg.show_ascii,
-            statusbar: cfg.show_statusbar,
-            keybar: cfg.show_keybar,
-        }
-    }
-
-    /// Show view's configuration dialog.
-    pub fn setup(&mut self) {
-        let mut dlg = Dialog::new(33, 8, DialogType::Normal, "View mode");
-        let fixed = dlg.add_next(Checkbox::new("Fixed width (Shift+F9)", self.fixed_width));
-        let ascii = dlg.add_next(Checkbox::new("Show ASCII field (Alt+F9)", self.ascii));
-        let statusbar = dlg.add_next(Checkbox::new("Show status bar", self.statusbar));
-        let keybar = dlg.add_next(Checkbox::new("Show key bar", self.keybar));
-        dlg.add_button(Button::std(StdButton::Ok, true));
-        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
-        dlg.cancel = btn_cancel;
-        if let Some(id) = dlg.run() {
-            if id != btn_cancel {
-                if let WidgetData::Bool(value) = dlg.get(fixed) {
-                    self.fixed_width = value;
-                }
-                if let WidgetData::Bool(value) = dlg.get(ascii) {
-                    self.ascii = value;
-                }
-                if let WidgetData::Bool(value) = dlg.get(statusbar) {
-                    self.statusbar = value;
-                }
-                if let WidgetData::Bool(value) = dlg.get(keybar) {
-                    self.keybar = value;
-                }
-            }
-        }
-    }
-}
-
-/// Scheme of the view.
-pub struct Scheme {
-    /// Total number of lines.
-    pub rows: usize,
-    /// Total number of bytes per line.
-    pub columns: usize,
-    /// Length (width) of the offset field.
-    pub offlen: usize,
-    // size and position of internal windows
-    pub statusbar: Window,
-    pub keybar: Window,
-    pub offset: Window,
-    pub hex: Window,
-    pub ascii: Window,
-}
-impl Scheme {
-    const FIXED_WIDTH: usize = 4; // number of words per line in fixed mode
-    const HEX_LEN: usize = 2; // length of a byte in hex representation
-    const FIELD_MARGIN: usize = 3; // margin size between fields offset/hex/ascii
-    const BYTE_MARGIN: usize = 1; // margin between bytes in a word
-    const WORD_MARGIN: usize = 2; // margin between word
-    const BYTES_IN_WORD: usize = 4; // number of bytes in a single word
-
-    /// Create new viewer instance.
-    pub fn new(wnd: &Window, config: &Config, offmax: u64) -> Self {
-        // define size of offset field
-        let mut offlen: usize = 4; // minimum offset as for u16
-        for i in (2..8).rev() {
-            if u64::max_value() << (i * 8) & offmax != 0 {
-                offlen = (i + 1) * 2;
-                break;
-            }
-        }
-
-        // calculate number of words per line
-        let words = if config.fixed_width {
-            Scheme::FIXED_WIDTH
-        } else {
-            // calculate word width (number of chars per word)
-            let hex_width = Scheme::BYTES_IN_WORD * Scheme::HEX_LEN
-                + (Scheme::BYTES_IN_WORD - 1) * Scheme::BYTE_MARGIN
-                + Scheme::WORD_MARGIN;
-
-            let ascii_width = if config.ascii {
-                Scheme::BYTES_IN_WORD
-            } else {
-                0
-            };
-            let word_width = hex_width + ascii_width;
-
-            // available space
-            let mut free_space = wnd.width - offlen - Scheme::FIELD_MARGIN;
-            if config.ascii {
-                free_space -= Scheme::FIELD_MARGIN - Scheme::WORD_MARGIN;
-            } else {
-                free_space += Scheme::WORD_MARGIN;
-            }
-
-            // number of words per line
-            free_space / word_width
-        };
-
-        let columns = words * Scheme::BYTES_IN_WORD;
-        let rows =
-            wnd.height - if config.statusbar { 1 } else { 0 } - if config.keybar { 1 } else { 0 };
-
-        // calculate hex field size
-        let word_width = Scheme::BYTES_IN_WORD * Scheme::HEX_LEN
-            + (Scheme::BYTES_IN_WORD - 1) * Scheme::BYTE_MARGIN;
-        let hex_width = words * word_width + (words - 1) * Scheme::WORD_MARGIN;
-
-        // increase the offset length if possible
-        if offlen < 8 {
-            let mut free_space = wnd.width - offlen - Scheme::FIELD_MARGIN - hex_width;
-            if config.ascii {
-                free_space -= Scheme::FIELD_MARGIN + columns;
-            }
-            offlen += std::cmp::min(8 - offlen, free_space);
-        }
-
-        // calculate windows size and position
-        let statusbar = Window {
-            x: wnd.x,
-            y: wnd.y,
-            width: wnd.width,
-            height: 1,
-        };
-        let keybar = Window {
-            x: wnd.x,
-            y: wnd.height - 1,
-            width: wnd.width,
-            height: 1,
-        };
-        let offset = Window {
-            x: wnd.x,
-            y: wnd.y + if config.statusbar { 1 } else { 0 },
-            width: offlen,
-            height: rows,
-        };
-        let hex = Window {
-            x: offset.x + offset.width + Scheme::FIELD_MARGIN,
-            y: wnd.y + if config.statusbar { 1 } else { 0 },
-            width: hex_width,
-            height: rows,
-        };
-        let ascii = Window {
-            x: hex.x + hex.width + Scheme::FIELD_MARGIN,
-            y: wnd.y + if config.statusbar { 1 } else { 0 },
-            width: columns,
-            height: rows,
-        };
-
-        Self {
-            rows,
-            columns,
-            offlen,
-            statusbar,
-            keybar,
-            offset,
-            hex,
-            ascii,
-        }
-    }
-
-    /// Get position of the byte at specified offset, returns absolute display coordinates.
-    pub fn position(&self, base: u64, offset: u64, hex: bool, lhb: bool) -> (usize, usize) {
-        let col = offset as usize % self.columns;
-        let row = (offset - base) as usize / self.columns;
-        debug_assert!(row < self.rows);
-
-        if hex {
-            (
-                self.hex.x
-                    + col * (Scheme::BYTES_IN_WORD - 1)
-                    + col / Scheme::BYTES_IN_WORD
-                    + if lhb { 0 } else { 1 },
-                self.hex.y + row,
-            )
-        } else {
-            (self.ascii.x + col, self.ascii.y + row)
-        }
-    }
-}
-
 /// Hex document view.
 pub struct View<'a> {
     pub scheme: &'a Scheme,
@@ -212,7 +16,6 @@ pub struct View<'a> {
     pub file: &'a File,
     pub offset: u64,
 }
-
 impl<'a> View<'a> {
     /// ASCII view table (Code page 437).
     #[rustfmt::skip]
@@ -417,6 +220,202 @@ impl<'a> View<'a> {
             .color(0, 0, self.scheme.keybar.width, Color::KeyBarTitle);
         for i in 0..10 {
             self.scheme.keybar.color(i * width, 0, 2, Color::KeyBarId);
+        }
+    }
+}
+
+/// Configuration of the view.
+#[derive(Clone)]
+pub struct Config {
+    /// Line width mode (fixed/dynamic).
+    pub fixed_width: bool,
+    /// Show/hide ascii field.
+    pub ascii: bool,
+    /// Show/hide status bar.
+    pub statusbar: bool,
+    /// Show/hide key bar.
+    pub keybar: bool,
+}
+impl Config {
+    pub fn new() -> Self {
+        let cfg = config::Config::get();
+        Self {
+            fixed_width: cfg.fixed_width,
+            ascii: cfg.show_ascii,
+            statusbar: cfg.show_statusbar,
+            keybar: cfg.show_keybar,
+        }
+    }
+
+    /// Show view's configuration dialog.
+    pub fn setup(&mut self) {
+        let mut dlg = Dialog::new(33, 8, DialogType::Normal, "View mode");
+        let fixed = dlg.add_next(Checkbox::new("Fixed width (Shift+F9)", self.fixed_width));
+        let ascii = dlg.add_next(Checkbox::new("Show ASCII field (Alt+F9)", self.ascii));
+        let statusbar = dlg.add_next(Checkbox::new("Show status bar", self.statusbar));
+        let keybar = dlg.add_next(Checkbox::new("Show key bar", self.keybar));
+        dlg.add_button(Button::std(StdButton::Ok, true));
+        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
+        dlg.cancel = btn_cancel;
+        if let Some(id) = dlg.run() {
+            if id != btn_cancel {
+                if let WidgetData::Bool(value) = dlg.get(fixed) {
+                    self.fixed_width = value;
+                }
+                if let WidgetData::Bool(value) = dlg.get(ascii) {
+                    self.ascii = value;
+                }
+                if let WidgetData::Bool(value) = dlg.get(statusbar) {
+                    self.statusbar = value;
+                }
+                if let WidgetData::Bool(value) = dlg.get(keybar) {
+                    self.keybar = value;
+                }
+            }
+        }
+    }
+}
+
+/// Scheme of the view.
+pub struct Scheme {
+    /// Total number of lines.
+    pub rows: usize,
+    /// Total number of bytes per line.
+    pub columns: usize,
+    /// Length (width) of the offset field.
+    pub offlen: usize,
+    // size and position of internal windows
+    pub statusbar: Window,
+    pub keybar: Window,
+    pub offset: Window,
+    pub hex: Window,
+    pub ascii: Window,
+}
+impl Scheme {
+    const FIXED_WIDTH: usize = 4; // number of words per line in fixed mode
+    const HEX_LEN: usize = 2; // length of a byte in hex representation
+    const FIELD_MARGIN: usize = 3; // margin size between fields offset/hex/ascii
+    const BYTE_MARGIN: usize = 1; // margin between bytes in a word
+    const WORD_MARGIN: usize = 2; // margin between word
+    const BYTES_IN_WORD: usize = 4; // number of bytes in a single word
+
+    /// Create new viewer instance.
+    pub fn new(wnd: &Window, config: &Config, offmax: u64) -> Self {
+        // define size of offset field
+        let mut offlen: usize = 4; // minimum offset as for u16
+        for i in (2..8).rev() {
+            if u64::max_value() << (i * 8) & offmax != 0 {
+                offlen = (i + 1) * 2;
+                break;
+            }
+        }
+
+        // calculate number of words per line
+        let words = if config.fixed_width {
+            Scheme::FIXED_WIDTH
+        } else {
+            // calculate word width (number of chars per word)
+            let hex_width = Scheme::BYTES_IN_WORD * Scheme::HEX_LEN
+                + (Scheme::BYTES_IN_WORD - 1) * Scheme::BYTE_MARGIN
+                + Scheme::WORD_MARGIN;
+
+            let ascii_width = if config.ascii {
+                Scheme::BYTES_IN_WORD
+            } else {
+                0
+            };
+            let word_width = hex_width + ascii_width;
+
+            // available space
+            let mut free_space = wnd.width - offlen - Scheme::FIELD_MARGIN;
+            if config.ascii {
+                free_space -= Scheme::FIELD_MARGIN - Scheme::WORD_MARGIN;
+            } else {
+                free_space += Scheme::WORD_MARGIN;
+            }
+
+            // number of words per line
+            free_space / word_width
+        };
+
+        let columns = words * Scheme::BYTES_IN_WORD;
+        let rows =
+            wnd.height - if config.statusbar { 1 } else { 0 } - if config.keybar { 1 } else { 0 };
+
+        // calculate hex field size
+        let word_width = Scheme::BYTES_IN_WORD * Scheme::HEX_LEN
+            + (Scheme::BYTES_IN_WORD - 1) * Scheme::BYTE_MARGIN;
+        let hex_width = words * word_width + (words - 1) * Scheme::WORD_MARGIN;
+
+        // increase the offset length if possible
+        if offlen < 8 {
+            let mut free_space = wnd.width - offlen - Scheme::FIELD_MARGIN - hex_width;
+            if config.ascii {
+                free_space -= Scheme::FIELD_MARGIN + columns;
+            }
+            offlen += std::cmp::min(8 - offlen, free_space);
+        }
+
+        // calculate windows size and position
+        let statusbar = Window {
+            x: wnd.x,
+            y: wnd.y,
+            width: wnd.width,
+            height: 1,
+        };
+        let keybar = Window {
+            x: wnd.x,
+            y: wnd.height - 1,
+            width: wnd.width,
+            height: 1,
+        };
+        let offset = Window {
+            x: wnd.x,
+            y: wnd.y + if config.statusbar { 1 } else { 0 },
+            width: offlen,
+            height: rows,
+        };
+        let hex = Window {
+            x: offset.x + offset.width + Scheme::FIELD_MARGIN,
+            y: wnd.y + if config.statusbar { 1 } else { 0 },
+            width: hex_width,
+            height: rows,
+        };
+        let ascii = Window {
+            x: hex.x + hex.width + Scheme::FIELD_MARGIN,
+            y: wnd.y + if config.statusbar { 1 } else { 0 },
+            width: columns,
+            height: rows,
+        };
+
+        Self {
+            rows,
+            columns,
+            offlen,
+            statusbar,
+            keybar,
+            offset,
+            hex,
+            ascii,
+        }
+    }
+
+    /// Get position of the byte at specified offset, returns absolute display coordinates.
+    pub fn position(&self, base: u64, offset: u64, hex: bool, lhb: bool) -> (usize, usize) {
+        let col = offset as usize % self.columns;
+        let row = (offset - base) as usize / self.columns;
+        debug_assert!(row < self.rows);
+
+        if hex {
+            (
+                self.hex.x
+                    + col * (Scheme::BYTES_IN_WORD - 1)
+                    + col / Scheme::BYTES_IN_WORD
+                    + if lhb { 0 } else { 1 },
+                self.hex.y + row,
+            )
+        } else {
+            (self.ascii.x + col, self.ascii.y + row)
         }
     }
 }

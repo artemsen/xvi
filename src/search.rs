@@ -21,7 +21,7 @@ impl Search {
         }
     }
 
-    /// Show "Find" dialog.
+    /// Show search dialog.
     pub fn dialog(&mut self) -> bool {
         let mut init = String::with_capacity(self.data.len() * 2);
         for byte in self.data.iter() {

@@ -173,7 +173,6 @@ impl Widget for Button {
 }
 
 /// Checkbox.
-#[allow(dead_code)]
 pub struct Checkbox {
     pub title: String,
     pub state: bool,
@@ -229,7 +228,7 @@ impl Widget for Checkbox {
     }
 }
 
-#[allow(dead_code)]
+/// Edit formats.
 pub enum EditFormat {
     Any,
     HexStream,
