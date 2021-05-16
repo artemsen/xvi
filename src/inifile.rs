@@ -71,16 +71,38 @@ impl IniFile {
 
     /// Set value for specified key in the named section.
     pub fn set(&mut self, section: &str, key: &str, value: &str) {
+        let section = section.to_lowercase();
+        let key = key.to_lowercase();
         self.sections
-            .entry(String::from(section))
+            .entry(section)
             .or_insert_with(BTreeMap::new)
-            .insert(String::from(key), String::from(value));
+            .insert(key, String::from(value));
     }
 
     /// Get value for specified key in the named section.
     pub fn get(&self, section: &str, key: &str) -> Option<&String> {
-        if let Some(section) = self.sections.get(section) {
-            return section.get(key);
+        let section = section.to_lowercase();
+        let key = key.to_lowercase();
+        if let Some(section) = self.sections.get(&section) {
+            return section.get(&key);
+        }
+        None
+    }
+
+    /// Get numeric value for specified key in the named section.
+    pub fn get_num(&self, section: &str, key: &str) -> Option<usize> {
+        if let Some(val) = self.get(section, key) {
+            if let Ok(val) = val.parse::<usize>() {
+                return Some(val);
+            }
+        }
+        None
+    }
+
+    /// Get boolean value for specified key in the named section.
+    pub fn get_bool(&self, section: &str, key: &str) -> Option<bool> {
+        if let Some(val) = self.get_num(section, key) {
+            return Some(val != 0);
         }
         None
     }

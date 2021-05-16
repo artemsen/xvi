@@ -23,7 +23,7 @@ impl Curses {
         // setup colors
         nc::start_color();
         nc::use_default_colors();
-        for (&color, &(fg, bg)) in Config::get().colors.iter() {
+        for &(color, fg, bg) in Config::get().colors.iter() {
             nc::init_pair(color as i16, fg as i16, bg as i16);
         }
 

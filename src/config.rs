@@ -11,19 +11,32 @@ use std::sync::{Arc, RwLock};
 
 /// Configuration (user settings).
 pub struct Config {
+    /// Line width mode (fixed/dynamic).
+    pub fixed_width: bool,
+    /// Show/hide ascii field.
+    pub show_ascii: bool,
+    /// Show/hide status bar.
+    pub show_statusbar: bool,
+    /// Show/hide key bar.
+    pub show_keybar: bool,
+
     /// Max number of stored file positions.
     pub filepos: usize,
     /// Color scheme.
-    pub colors: BTreeMap<Color, (u8, u8)>,
+    pub colors: Vec<(Color, u8, u8)>,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let mut colors = BTreeMap::new();
+        let mut colors = Vec::new();
         for &(id, fg, bg) in Config::DARK_THEME {
-            colors.insert(id, (fg, bg));
+            colors.push((id, fg, bg));
         }
         Self {
+            fixed_width: false,
+            show_ascii: true,
+            show_statusbar: true,
+            show_keybar: true,
             filepos: 10,
             colors,
         }
@@ -35,8 +48,9 @@ thread_local! {
 }
 
 impl Config {
-    const HISTORY: &'static str = "history";
-    const COLORS: &'static str = "colors";
+    const VIEW: &'static str = "View";
+    const HISTORY: &'static str = "History";
+    const COLORS: &'static str = "Colors";
 
     /// Get current configuration instance.
     pub fn get() -> Arc<Config> {
@@ -60,23 +74,31 @@ impl Config {
     pub fn load_file(file: &Path) {
         if let Ok(ini) = IniFile::load(file) {
             let mut cfg = Config::default();
-            if let Some(val) = ini.get(Config::HISTORY, "filepos") {
-                if let Ok(val) = val.parse::<usize>() {
-                    cfg.filepos = val;
-                }
+            if let Some(val) = ini.get_bool(Config::VIEW, "FixedWidth") {
+                cfg.fixed_width = val;
             }
-            if let Some(val) = ini.get(Config::COLORS, "theme") {
+            if let Some(val) = ini.get_bool(Config::VIEW, "ShowAscii") {
+                cfg.show_ascii = val;
+            }
+            if let Some(val) = ini.get_bool(Config::VIEW, "ShowStatusbar") {
+                cfg.show_statusbar = val;
+            }
+            if let Some(val) = ini.get_bool(Config::VIEW, "ShowKeybar") {
+                cfg.show_keybar = val;
+            }
+            if let Some(val) = ini.get_num(Config::HISTORY, "FilePos") {
+                cfg.filepos = val;
+            }
+            if let Some(val) = ini.get(Config::COLORS, "Theme") {
                 match val.to_lowercase().as_str() {
                     "light" => {
-                        for &(id, fg, bg) in Config::LIGHT_THEME {
-                            cfg.colors.insert(id, (fg, bg));
-                        }
+                        cfg.colors = Vec::from(Config::LIGHT_THEME);
                     }
                     "dark" => { /* already set by default */ }
                     _ => {}
                 };
             }
-            if let Some(section) = ini.sections.get(Config::COLORS) {
+            if let Some(section) = ini.sections.get(&Config::COLORS.to_lowercase()) {
                 cfg.parse_colors(section);
             }
 
@@ -87,7 +109,7 @@ impl Config {
     /// Parse color parameters.
     fn parse_colors(&mut self, section: &BTreeMap<String, String>) {
         for (key, val) in section.iter() {
-            let id = match key.to_lowercase().as_str() {
+            let id = match key.as_str() {
                 "offsetnormal" => Color::OffsetNormal,
                 "offsethi" => Color::OffsetHi,
                 "hexnormal" => Color::HexNormal,
@@ -117,14 +139,16 @@ impl Config {
             if split.len() == 2 {
                 if let Ok(fg) = split[0].trim().parse::<u8>() {
                     if let Ok(bg) = split[1].trim().parse::<u8>() {
-                        self.colors.insert(id, (fg, bg));
+                        // replace color
+                        let index = self.colors.iter().position(|c| c.0 == id).unwrap();
+                        self.colors[index] = (id, fg, bg);
                     }
                 }
             }
         }
     }
 
-    /// Default color shceme for light theme.
+    /// Default color scheme for light theme (id, foreground, background).
     #[rustfmt::skip]
     const LIGHT_THEME: &'static [(Color, u8, u8)] = &[
         (Color::OffsetNormal,     7,  4),
@@ -150,7 +174,7 @@ impl Config {
         (Color::EditSelection,    15, 0),
     ];
 
-    /// Default color shceme for dark theme.
+    /// Default color scheme for dark theme (id, foreground, background).
     #[rustfmt::skip]
     const DARK_THEME: &'static [(Color, u8, u8)] = &[
         (Color::OffsetNormal,    241, 233),

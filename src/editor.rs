@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-//use super::config::Config;
+use super::config::Config;
 use super::curses::*;
 use super::cursor::*;
 use super::dialog::*;
@@ -49,10 +49,10 @@ impl Editor {
             file,
             page: PageData::new(u64::MAX, Vec::new()),
             view_cfg: view::Config {
-                fixed_width: false,
-                ascii: true,
-                statusbar: true,
-                keybar: true,
+                fixed_width: Config::get().fixed_width,
+                ascii: Config::get().show_ascii,
+                statusbar: Config::get().show_statusbar,
+                keybar: Config::get().show_keybar,
             },
             last_goto: history.last_goto,
             search: Search::new(history.last_search),
