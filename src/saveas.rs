@@ -4,7 +4,7 @@
 use super::dialog::*;
 use super::widget::*;
 
-/// "Save as" dialog
+/// "Save as" dialog.
 pub struct SaveAsDialog;
 
 impl SaveAsDialog {

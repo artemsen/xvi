@@ -167,7 +167,7 @@ impl<'a> View<'a> {
         let (value, _) = self.page.get(self.offset).unwrap();
         let percent = (self.offset * 100 / (self.file.size - 1)) as u8;
         let stat = format!(
-            " {ch} [0x{:02x} {value:<3} 0{value:<3o} {value:08b}]     0x{offset:04x}   {percent:>3}%",
+            " {ch}  0x{offset:04x} = [0x{:02x} {value:<3} 0{value:<3o} {value:08b}]  {percent:>3}%",
             value = value,
             offset =self.offset,
             percent = percent,
