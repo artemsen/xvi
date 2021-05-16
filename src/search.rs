@@ -27,30 +27,24 @@ impl Search {
         for byte in self.data.iter() {
             init.push_str(&format!("{:02x}", byte));
         }
+
         let width = 40;
-        let mut dlg = Dialog::new(DialogType::Normal);
-        dlg.add(0, 0, width + 4, 10, Border::new("Find"));
-
-        dlg.add(2, 1, 0, 1, Text::new("Hex sequence to search:"));
-        let editor = Edit::new(width, init, EditFormat::HexStream);
-        let hex = dlg.add(2, 2, editor.width, 1, editor);
-
-        dlg.add(2, 3, 0, 1, Text::new("ASCII:"));
-        let editor = Edit::new(width, String::new(), EditFormat::Any);
-        let ascii = dlg.add(2, 4, editor.width, 1, editor);
-
-        dlg.add(0, 5, width + 4, 1, Separator::new(None));
-        let backward = dlg.add(
-            2,
-            6,
-            width,
-            1,
-            Checkbox::new("Backward search", self.backward),
+        let mut dlg = Dialog::new(
+            width + Dialog::PADDING_X * 2,
+            10,
+            DialogType::Normal,
+            "Search",
         );
+        dlg.add_next(Text::new("Hex sequence to search:"));
+        let hex = dlg.add_next(Edit::new(width, init, EditFormat::HexStream));
+        dlg.add_next(Text::new("ASCII:"));
+        let ascii = dlg.add_next(Edit::new(width, String::new(), EditFormat::Any));
+        dlg.add_separator();
+        let backward = dlg.add_next(Checkbox::new("Backward search", self.backward));
 
-        dlg.add(0, 7, width + 4, 1, Separator::new(None));
-        let btn_ok = dlg.add(14, 8, 10, 1, Button::std(StdButton::Ok, true));
-        let btn_cancel = dlg.add(21, 8, 10, 1, Button::std(StdButton::Cancel, false));
+        let btn_ok = dlg.add_button(Button::std(StdButton::Ok, true));
+        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
+        dlg.cancel = btn_cancel;
 
         dlg.rules
             .push(DialogRule::CopyData(hex, ascii, Box::new(HexToAscii {})));
@@ -76,24 +70,18 @@ impl Search {
 
         if let Some(id) = dlg.run() {
             if id != btn_cancel {
-                match dlg.get(hex) {
-                    WidgetData::Text(value) => {
-                        let mut value = value;
-                        if value.len() % 2 != 0 {
-                            value.push('0');
-                        }
-                        self.data = (0..value.len())
-                            .step_by(2)
-                            .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
-                            .collect();
+                if let WidgetData::Text(value) = dlg.get(hex) {
+                    let mut value = value;
+                    if value.len() % 2 != 0 {
+                        value.push('0');
                     }
-                    _ => unreachable!(),
+                    self.data = (0..value.len())
+                        .step_by(2)
+                        .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
+                        .collect();
                 }
-                match dlg.get(backward) {
-                    WidgetData::Bool(value) => {
-                        self.backward = value;
-                    }
-                    _ => unreachable!(),
+                if let WidgetData::Bool(value) = dlg.get(backward) {
+                    self.backward = value;
                 }
                 return true;
             }

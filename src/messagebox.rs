@@ -45,9 +45,7 @@ impl MessageBox {
 
     /// Show message box dialog.
     pub fn show(&self) -> Option<StdButton> {
-        let mut dlg = Dialog::new(self.dtype);
-
-        // calculate buttons line width
+        // calculate dialog width
         let mut buttons_width = 0;
         for (button, default) in self.buttons.iter() {
             if buttons_width != 0 {
@@ -55,50 +53,40 @@ impl MessageBox {
             }
             buttons_width += Button::std(*button, *default).text.len();
         }
-
-        // calculate min width
         let mut width = buttons_width;
         for (line, _) in self.message.iter() {
             if width < line.len() {
                 width = line.len();
             }
         }
+        width += Dialog::PADDING_X * 2;
 
-        let mut y = 0;
+        // calculate dialog height
+        let height = self.message.len() - 1 +
+            Dialog::PADDING_Y * 2 +
+            2 /* buttons with separator */;
 
-        // border
-        let height = self.message.len() - 1 + if self.buttons.is_empty() { 2 } else { 4 };
-        dlg.add(0, 0, width + 4, height, Border::new(&self.message[0].0));
-
-        // message text
-        y += 1;
-        for (line, center) in self.message.iter().skip(1) {
-            let mut x = 2;
+        // construct dialog
+        let mut dlg = Dialog::new(width, height, self.dtype, &self.message.first().unwrap().0);
+        for (text, center) in self.message.iter().skip(1) {
+            let widget = Text::new(text);
             if *center {
-                x += (width - line.len()) / 2;
+                dlg.add_center(dlg.last_line, text.len(), widget);
+                dlg.last_line += 1;
+            } else {
+                dlg.add_next(widget);
             }
-            dlg.add(x, y, 0, 1, Text::new(line));
-            y += 1;
-        }
-
-        // separator between message and buttons
-        if !self.buttons.is_empty() {
-            dlg.add(0, y, width + 4, 1, Separator::new(None));
-            y += 1;
         }
 
         // buttons line
         let mut button_ids = BTreeMap::new();
-        let mut x = 2 + width / 2 - buttons_width / 2;
-        for (button, default) in self.buttons.iter() {
-            let btn = Button::std(*button, *default);
-            let width = btn.text.len();
-            let id = dlg.add(x, y, width, 1, btn);
-            button_ids.insert(id, *button);
-            if *default {
+        for &(button, default) in self.buttons.iter() {
+            let btn = Button::std(button, default);
+            let id = dlg.add_button(btn);
+            button_ids.insert(id, button);
+            if default {
                 dlg.focus = id;
             }
-            x += width + 1;
         }
 
         if let Some(id) = dlg.run() {

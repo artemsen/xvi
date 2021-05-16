@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
+use super::curses::Window;
 use super::dialog::*;
 use super::widget::*;
 
@@ -11,32 +12,33 @@ impl GotoDialog {
     /// Show "Go to" dialog, return absolute address to jump.
     pub fn show(default: u64, current: u64) -> Option<u64> {
         let width = 44;
-        let mut dlg = Dialog::new(DialogType::Normal);
-        dlg.add(0, 0, width + 4, 8, Border::new("Go to"));
+        let mut dlg = Dialog::new(width + Dialog::PADDING_X * 2, 9, DialogType::Normal, "Goto");
 
-        dlg.add(2, 1, 0, 1, Text::new("Absolute offset:"));
+        dlg.add_next(Text::new("Absolute offset"));
+        let abshex =
+            GotoDialog::add_edit(&mut dlg, Dialog::PADDING_X, "hex:", EditFormat::HexUnsigned);
+        let absdec = GotoDialog::add_edit(
+            &mut dlg,
+            Dialog::PADDING_X + 23,
+            "dec:",
+            EditFormat::DecUnsigned,
+        );
+        dlg.last_line += 1; // skip
 
-        dlg.add(2, 2, 0, 1, Text::new("hex:"));
-        let editor = Edit::new(17, format!("{:x}", default), EditFormat::HexUnsigned);
-        let abshex = dlg.add(6, 2, editor.width, 1, editor);
+        dlg.add_separator();
+        dlg.add_next(Text::new("Relative offset"));
+        let relhex =
+            GotoDialog::add_edit(&mut dlg, Dialog::PADDING_X, "hex:", EditFormat::HexSigned);
+        let reldec = GotoDialog::add_edit(
+            &mut dlg,
+            Dialog::PADDING_X + 23,
+            "dec:",
+            EditFormat::DecSigned,
+        );
 
-        dlg.add(24, 2, 0, 1, Text::new("dec:"));
-        let editor = Edit::new(18, String::new(), EditFormat::DecUnsigned);
-        let absdec = dlg.add(28, 2, editor.width, 1, editor);
-
-        dlg.add(2, 3, 0, 1, Text::new("Relative offset:"));
-
-        dlg.add(2, 4, 0, 1, Text::new("hex:"));
-        let editor = Edit::new(17, String::new(), EditFormat::HexSigned);
-        let relhex = dlg.add(6, 4, editor.width, 1, editor);
-
-        dlg.add(24, 4, 0, 1, Text::new("dec:"));
-        let editor = Edit::new(18, String::new(), EditFormat::DecSigned);
-        let reldec = dlg.add(28, 4, editor.width, 1, editor);
-
-        dlg.add(0, 5, width + 4, 1, Separator::new(None));
-        dlg.add(16, 6, 10, 1, Button::std(StdButton::Ok, true));
-        let btn_cancel = dlg.add(23, 6, 10, 1, Button::std(StdButton::Cancel, false));
+        dlg.add_button(Button::std(StdButton::Ok, true));
+        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
+        dlg.cancel = btn_cancel;
 
         let conv = OffsetConverter::new(EditFormat::HexUnsigned, EditFormat::DecUnsigned, 0);
         dlg.rules.push(DialogRule::CopyData(abshex, absdec, conv));
@@ -66,6 +68,7 @@ impl GotoDialog {
         let conv = OffsetConverter::new(EditFormat::DecSigned, EditFormat::DecUnsigned, current);
         dlg.rules.push(DialogRule::CopyData(reldec, absdec, conv));
 
+        dlg.set(abshex, WidgetData::Text(format!("{:x}", default)));
         dlg.apply(abshex);
 
         if let Some(id) = dlg.run() {
@@ -79,6 +82,25 @@ impl GotoDialog {
             }
         }
         None
+    }
+
+    /// Add edit field with title.
+    fn add_edit(dlg: &mut Dialog, x: usize, title: &str, fmt: EditFormat) -> ItemId {
+        let text = Window {
+            x,
+            y: dlg.last_line,
+            width: title.len(),
+            height: 1,
+        };
+        let width = 17; // edit field length
+        let edit = Window {
+            x: x + text.width,
+            y: dlg.last_line,
+            width,
+            height: 1,
+        };
+        dlg.add(text, Text::new(title));
+        dlg.add(edit, Edit::new(width, String::new(), fmt))
     }
 }
 
@@ -105,9 +127,7 @@ impl CopyData for OffsetConverter {
                     self.current as i64 + i64::from_str_radix(&value, 16).unwrap_or(0)
                 }
                 EditFormat::HexUnsigned => i64::from_str_radix(&value, 16).unwrap_or(0),
-                EditFormat::DecSigned => {
-                    self.current as i64 + (&value).parse::<i64>().unwrap_or(0)
-                }
+                EditFormat::DecSigned => self.current as i64 + (&value).parse::<i64>().unwrap_or(0),
                 EditFormat::DecUnsigned => (&value).parse::<i64>().unwrap_or(0),
             };
             let dst = match self.dst {

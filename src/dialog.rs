@@ -2,14 +2,18 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::curses::*;
-use super::widget::{Widget, WidgetData};
+use super::widget::{Border, Button, Separator, Widget, WidgetData};
 
 /// Dialog window.
 pub struct Dialog {
+    /// Dialog size and position.
+    wnd: Window,
     /// Items on the dialog window.
     items: Vec<DialogItem>,
     /// Dialog's rules (links between items, etc).
     pub rules: Vec<DialogRule>,
+    /// Last used line number (used for easy dialog construction).
+    pub last_line: usize,
     /// Currently focused item.
     pub focus: ItemId,
     /// Identifier of the Cancel button to force exit.
@@ -21,12 +25,49 @@ pub struct Dialog {
 impl Dialog {
     const MARGIN_X: usize = 3;
     const MARGIN_Y: usize = 1;
+    pub const PADDING_X: usize = 2;
+    pub const PADDING_Y: usize = 1;
 
     /// Create new dialog instance.
-    pub fn new(dt: DialogType) -> Self {
+    pub fn new(width: usize, height: usize, dt: DialogType, title: &str) -> Self {
+        // calculate dialogs's window size and position
+        let (scr_width, scr_height) = Curses::screen_size();
+        let dlg_width = width + Dialog::MARGIN_X * 2;
+        let dlg_height = height + Dialog::MARGIN_Y * 2;
+        let wnd = Window {
+            x: scr_width / 2 - dlg_width / 2,
+            y: (scr_height as f32 / 2.5) as usize - dlg_height / 2,
+            width: dlg_width,
+            height: dlg_height,
+        };
+
+        // initial items: border with separator
+        let border = DialogItem {
+            wnd: Window {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            },
+            enabled: true,
+            widget: Border::new(title),
+        };
+        let separator = DialogItem {
+            wnd: Window {
+                x: 0,
+                y: height - 3,
+                width,
+                height: 1,
+            },
+            enabled: true,
+            widget: Separator::new(None),
+        };
+
         Self {
-            items: Vec::new(),
+            wnd,
+            items: vec![border, separator],
             rules: Vec::new(),
+            last_line: Dialog::PADDING_Y,
             focus: -1,
             cancel: -1,
             dtype: dt,
@@ -34,28 +75,82 @@ impl Dialog {
     }
 
     /// Construct dialog: add new item.
-    pub fn add(
-        &mut self,
-        x: usize,
-        y: usize,
-        width: usize,
-        height: usize,
-        widget: Box<dyn Widget>,
-    ) -> ItemId {
+    pub fn add(&mut self, wnd: Window, widget: Box<dyn Widget>) -> ItemId {
         self.items.push(DialogItem {
+            wnd,
+            enabled: true,
+            widget,
+        });
+        self.items.len() as ItemId - 1
+    }
+
+    /// Construct dialog: add one lined item to the next row.
+    pub fn add_next(&mut self, widget: Box<dyn Widget>) -> ItemId {
+        let wnd = Window {
+            x: Dialog::PADDING_X,
+            y: self.last_line,
+            width: self.wnd.width - (Dialog::MARGIN_X + Dialog::PADDING_X) * 2,
+            height: 1,
+        };
+        self.last_line += 1;
+        self.add(wnd, widget)
+    }
+
+    /// Construct dialog: add horizontal separator to the next row.
+    pub fn add_separator(&mut self) {
+        let wnd = Window {
+            x: 0,
+            y: self.last_line,
+            width: self.wnd.width - Dialog::MARGIN_X * 2,
+            height: 1,
+        };
+        self.last_line += 1;
+        self.add(wnd, Separator::new(None));
+    }
+
+    /// Construct dialog: add centered item.
+    pub fn add_center(&mut self, y: usize, width: usize, widget: Box<dyn Widget>) -> ItemId {
+        let center = (self.wnd.width - (Dialog::MARGIN_X * 2)) / 2;
+        let x = if !self.items.iter().any(|i| i.wnd.y == y) {
+            center - width / 2
+        } else {
+            // total width of the items on the same line
+            let mut total_width = width;
+            for item in self.items.iter().filter(|i| i.wnd.y == y) {
+                total_width += item.wnd.width + 1 /* space */;
+            }
+            // move items on the same line to the left
+            let mut x = center - total_width / 2;
+            for item in self.items.iter_mut().filter(|i| i.wnd.y == y) {
+                item.wnd.x = x;
+                x += item.wnd.width + 1 /* space */;
+            }
+            x
+        };
+
+        let wnd = Window {
             x,
             y,
             width,
-            height,
-            widget,
-            enabled: true,
-        });
-        self.items.len() as isize - 1
+            height: 1,
+        };
+        self.add(wnd, widget)
+    }
+
+    /// Construct dialog: add button to the main block (Ok, Cancel, etc).
+    pub fn add_button(&mut self, button: Box<Button>) -> ItemId {
+        let y = self.wnd.height - (Dialog::MARGIN_Y + Dialog::PADDING_Y) * 2;
+        self.add_center(y, button.text.len(), button)
     }
 
     /// Get item's data.
     pub fn get(&self, id: ItemId) -> WidgetData {
         self.items[id as usize].widget.as_ref().get_data()
+    }
+
+    /// Set item's data.
+    pub fn set(&mut self, id: ItemId, data: WidgetData) {
+        self.items[id as usize].widget.as_mut().set_data(data);
     }
 
     /// Apply rules for specified items.
@@ -87,29 +182,6 @@ impl Dialog {
     pub fn run(&mut self) -> Option<ItemId> {
         let mut rc = None;
 
-        // window for the dialog
-        let (scr_width, scr_height) = Curses::screen_size();
-        let mut wnd = Window {
-            x: scr_width / 2,
-            y: (scr_height as f32 / 2.5) as usize,
-            width: 0,
-            height: 0,
-        };
-        for item in self.items.iter() {
-            let right = item.x + item.width;
-            if right > wnd.width {
-                wnd.width = right;
-            }
-            let bottom = item.y + item.height;
-            if bottom > wnd.height {
-                wnd.height = bottom;
-            }
-        }
-        wnd.x -= wnd.width / 2;
-        wnd.y -= wnd.height / 2;
-        wnd.width += Dialog::MARGIN_X * 2;
-        wnd.height += Dialog::MARGIN_Y * 2;
-
         // set focus to the first available widget
         if self.focus < 0 {
             self.move_focus(true);
@@ -118,7 +190,7 @@ impl Dialog {
         // main event handler loop
         loop {
             // redraw
-            self.draw(&wnd);
+            self.draw();
 
             // handle next event
             match Curses::poll_event() {
@@ -181,48 +253,38 @@ impl Dialog {
     }
 
     /// Draw dialog.
-    fn draw(&self, wnd: &Window) {
+    fn draw(&self) {
         Curses::color_on(if self.dtype == DialogType::Normal {
             Color::DialogNormal
         } else {
             Color::DialogError
         });
-        self.draw_background(&wnd);
-        let cursor = self.draw_items(&wnd);
-        if let Some((x, y)) = cursor {
-            Curses::show_cursor(x, y);
-        } else {
-            Curses::hide_cursor();
-        }
-    }
 
-    /// Draw background and shadow of dialog window.
-    fn draw_background(&self, wnd: &Window) {
-        let spaces = (0..wnd.width).map(|_| " ").collect::<String>();
-        for y in 0..wnd.height {
-            wnd.print(0, y, &spaces);
+        // background
+        let spaces = (0..self.wnd.width).map(|_| " ").collect::<String>();
+        for y in 0..self.wnd.height {
+            self.wnd.print(0, y, &spaces);
         }
-        // shadow, out of window
-        for y in (wnd.y + 1)..(wnd.y + wnd.height) {
-            Curses::color(wnd.x + wnd.width, y, 2, Color::DialogShadow);
+
+        // shadow
+        for y in (self.wnd.y + 1)..(self.wnd.y + self.wnd.height) {
+            Curses::color(self.wnd.x + self.wnd.width, y, 2, Color::DialogShadow);
         }
         Curses::color(
-            wnd.x + 2,
-            wnd.y + wnd.height,
-            wnd.width,
+            self.wnd.x + 2,
+            self.wnd.y + self.wnd.height,
+            self.wnd.width,
             Color::DialogShadow,
         );
-    }
 
-    /// Draw items.
-    fn draw_items(&self, wnd: &Window) -> Option<(usize, usize)> {
+        // dialog items
         let mut cursor: Option<(usize, usize)> = None;
         for (index, item) in self.items.iter().enumerate() {
             let subcan = Window {
-                x: wnd.x + item.x + Dialog::MARGIN_X,
-                y: wnd.y + item.y + Dialog::MARGIN_Y,
-                width: item.width,
-                height: item.height,
+                x: self.wnd.x + item.wnd.x + Dialog::MARGIN_X,
+                y: self.wnd.y + item.wnd.y + Dialog::MARGIN_Y,
+                width: item.wnd.width,
+                height: item.wnd.height,
             };
             let cursor_x = item
                 .widget
@@ -231,7 +293,11 @@ impl Dialog {
                 cursor = Some((subcan.x + x, subcan.y));
             }
         }
-        cursor
+        if let Some((x, y)) = cursor {
+            Curses::show_cursor(x, y);
+        } else {
+            Curses::hide_cursor();
+        }
     }
 
     /// Move the focus to the next/previous widget.
@@ -272,12 +338,9 @@ pub type ItemId = isize;
 
 /// Single dialog item.
 pub struct DialogItem {
-    pub x: usize,
-    pub y: usize,
-    pub width: usize,
-    pub height: usize,
-    pub enabled: bool,
-    pub widget: Box<dyn Widget>,
+    wnd: Window,
+    enabled: bool,
+    widget: Box<dyn Widget>,
 }
 
 /// Dialog rules.
