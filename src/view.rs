@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
+use super::config;
 use super::curses::{Color, Curses, Window};
+use super::dialog::*;
 use super::file::File;
 use super::page::PageData;
+use super::widget::*;
 
 /// Configuration of the view.
 #[derive(Clone)]
@@ -16,6 +19,69 @@ pub struct Config {
     pub statusbar: bool,
     /// Show/hide key bar.
     pub keybar: bool,
+}
+impl Config {
+    pub fn new() -> Self {
+        let cfg = config::Config::get();
+        Self {
+            fixed_width: cfg.fixed_width,
+            ascii: cfg.show_ascii,
+            statusbar: cfg.show_statusbar,
+            keybar: cfg.show_keybar,
+        }
+    }
+
+    /// Show dialog to set up the view.
+    pub fn setup(&mut self) {
+        let width = 30;
+        let mut dlg = Dialog::new(DialogType::Normal);
+        dlg.add(0, 0, width + 4, 8, Border::new("View mode"));
+
+        let fixed = dlg.add(
+            2,
+            1,
+            width,
+            1,
+            Checkbox::new("Fixed width (Shift+F9)", self.fixed_width),
+        );
+        let ascii = dlg.add(
+            2,
+            2,
+            width,
+            1,
+            Checkbox::new("Show ASCII field (Alt+F9)", self.ascii),
+        );
+        let statusbar = dlg.add(
+            2,
+            3,
+            width,
+            1,
+            Checkbox::new("Show status bar", self.statusbar),
+        );
+        let keybar = dlg.add(2, 4, width, 1, Checkbox::new("Show key bar", self.keybar));
+
+        dlg.add(0, 5, width + 4, 1, Separator::new(None));
+        dlg.add(9, 6, 10, 1, Button::std(StdButton::Ok, true));
+        let btn_cancel = dlg.add(16, 6, 10, 1, Button::std(StdButton::Cancel, false));
+        dlg.cancel = btn_cancel;
+
+        if let Some(id) = dlg.run() {
+            if id != btn_cancel {
+                if let WidgetData::Bool(value) = dlg.get(fixed) {
+                    self.fixed_width = value;
+                }
+                if let WidgetData::Bool(value) = dlg.get(ascii) {
+                    self.ascii = value;
+                }
+                if let WidgetData::Bool(value) = dlg.get(statusbar) {
+                    self.statusbar = value;
+                }
+                if let WidgetData::Bool(value) = dlg.get(keybar) {
+                    self.keybar = value;
+                }
+            }
+        }
+    }
 }
 
 /// Scheme of the view.
@@ -338,17 +404,13 @@ impl<'a> View<'a> {
         let titles = &[
             "Help", // F1
             "Save", // F2
-            if self.config.fixed_width {
-                "UnWrap"
-            } else {
-                "Wrap"
-            }, // F3
+            "",     // F3
             "",     // F4
             "Goto", // F5
             "",     // F6
             "Find", // F7
             "",     // F8
-            "",     // F9
+            "Mode", // F9
             "Exit", // F10
         ];
 

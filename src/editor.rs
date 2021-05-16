@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::config::Config;
 use super::curses::*;
 use super::cursor::*;
 use super::dialog::*;
@@ -48,12 +47,7 @@ impl Editor {
             cursor,
             file,
             page: PageData::new(u64::MAX, Vec::new()),
-            view_cfg: view::Config {
-                fixed_width: Config::get().fixed_width,
-                ascii: Config::get().show_ascii,
-                statusbar: Config::get().show_statusbar,
-                keybar: Config::get().show_keybar,
-            },
+            view_cfg: view::Config::new(),
             last_goto: history.last_goto,
             search: Search::new(history.last_search),
             exit: false,
@@ -107,17 +101,6 @@ impl Editor {
                 }
                 true
             }
-            Key::F(3) => {
-                Curses::clear_screen();
-                if key.modifier == KeyPress::SHIFT {
-                    self.view_cfg.ascii = !self.view_cfg.ascii;
-                    self.cursor.place = Place::Hex;
-                } else {
-                    self.view_cfg.fixed_width = !self.view_cfg.fixed_width;
-                }
-                self.move_cursor(Location::Absolute(self.cursor.offset));
-                true
-            }
             Key::F(5) => {
                 self.goto();
                 true
@@ -130,6 +113,21 @@ impl Editor {
                 } else {
                     self.find();
                 }
+                true
+            }
+            Key::F(9) => {
+                if key.modifier == KeyPress::SHIFT {
+                    self.view_cfg.fixed_width = !self.view_cfg.fixed_width;
+                } else if key.modifier == KeyPress::ALT {
+                    self.view_cfg.ascii = !self.view_cfg.ascii;
+                } else {
+                    self.view_cfg.setup();
+                }
+                if !self.view_cfg.ascii {
+                    self.cursor.place = Place::Hex;
+                }
+                Curses::clear_screen();
+                self.move_cursor(Location::Absolute(self.cursor.offset));
                 true
             }
             Key::Esc | Key::F(10) => {
