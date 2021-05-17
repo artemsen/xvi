@@ -41,6 +41,11 @@ impl Curses {
         nc::clear();
     }
 
+    /// Refresh the whole screen.
+    pub fn refresh_screen() {
+        nc::refresh();
+    }
+
     /// Print text on the window.
     pub fn print(x: usize, y: usize, text: &str) {
         nc::mvaddstr(y as i32, x as i32, text);

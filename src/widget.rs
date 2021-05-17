@@ -247,7 +247,7 @@ pub struct ProgressBar {
 impl ProgressBar {
     /// Create new widget instance.
     pub fn new() -> Box<Self> {
-        Box::new(Self { percent: 0 })
+        Box::new(Self { percent: usize::MAX })
     }
 }
 

@@ -373,7 +373,7 @@ impl Editor {
 
     /// Find position of the sequence.
     fn find(&mut self) {
-        if self.search.dialog() {
+        if self.search.configure() {
             self.draw();
             self.find_next(self.search.backward);
         }
@@ -384,10 +384,8 @@ impl Editor {
         if self.search.data.is_empty() {
             self.search.backward = backward;
             self.find();
-        } else if let Some(offset) = self
-            .file
-            .find(&self.search.data, self.cursor.offset, backward)
-        {
+        } else if let Some(offset) = self.search.find(&mut self.file, self.cursor.offset) {
+            Curses::clear_screen();
             self.move_cursor(Location::Absolute(offset));
         } else {
             MessageBox::new("Search", DialogType::Error)

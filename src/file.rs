@@ -108,66 +108,6 @@ impl File {
         Ok(())
     }
 
-    /// Find sequence inside file.
-    pub fn find(&mut self, sequence: &[u8], start: u64, backward: bool) -> Option<u64> {
-        let step = 1024;
-        let size = step + sequence.len() as i64;
-        let mut offset = start as i64;
-
-        if !backward {
-            offset += 1;
-        } else {
-            offset -= 1;
-        }
-
-        let mut round = false;
-
-        loop {
-            if !backward {
-                // forward search
-                if offset as u64 >= self.size {
-                    offset = 0;
-                    round = true;
-                }
-            } else {
-                // backward search
-                if round && (offset as u64) < start {
-                    break;
-                }
-                offset -= size;
-                if offset < 0 {
-                    if self.size < size as u64 {
-                        offset = 0;
-                    } else {
-                        offset = self.size as i64 - size;
-                    }
-                    round = true;
-                }
-            }
-
-            let mut file_data = self.read(offset as u64, size as usize).unwrap();
-            self.apply(offset as u64, &mut file_data);
-
-            let mut window = file_data.windows(sequence.len());
-            if !backward {
-                if let Some(pos) = window.position(|wnd| wnd == sequence) {
-                    return Some(offset as u64 + pos as u64);
-                }
-            } else if let Some(pos) = window.rposition(|wnd| wnd == sequence) {
-                return Some(offset as u64 + pos as u64);
-            }
-
-            if !backward {
-                offset += step;
-                if round && offset as u64 >= start {
-                    break;
-                }
-            }
-        }
-
-        None
-    }
-
     /// Read up to `size` bytes from file.
     fn read(&mut self, offset: u64, size: usize) -> io::Result<Vec<u8>> {
         debug_assert!(offset < self.size);
