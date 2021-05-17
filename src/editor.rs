@@ -74,7 +74,7 @@ impl Editor {
             self.draw();
 
             // handle next event
-            match Curses::poll_event() {
+            match Curses::wait_event() {
                 Event::TerminalResize => {
                     Curses::clear_screen();
                     self.move_cursor(Location::Absolute(self.cursor.offset));
@@ -385,14 +385,9 @@ impl Editor {
             self.search.backward = backward;
             self.find();
         } else if let Some(offset) = self.search.find(&mut self.file, self.cursor.offset) {
-            Curses::clear_screen();
             self.move_cursor(Location::Absolute(offset));
-        } else {
-            MessageBox::new("Search", DialogType::Error)
-                .center("Sequence not found!")
-                .button(StdButton::Ok, true)
-                .show();
         }
+        Curses::clear_screen();
     }
 
     /// Exit from editor.

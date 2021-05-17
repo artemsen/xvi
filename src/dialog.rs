@@ -193,7 +193,7 @@ impl Dialog {
             self.draw();
 
             // handle next event
-            match Curses::poll_event() {
+            match Curses::wait_event() {
                 Event::TerminalResize => {}
                 Event::KeyPress(event) => {
                     match event.key {

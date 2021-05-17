@@ -3,6 +3,7 @@
 
 use super::dialog::*;
 use super::file::File;
+use super::messagebox::MessageBox;
 use super::progress::Progress;
 use super::widget::*;
 
@@ -44,7 +45,10 @@ impl Search {
 
         loop {
             pval += step as u64;
-            progress.update(std::cmp::min(pval, file.size));
+            if !progress.update(std::cmp::min(pval, file.size)) {
+                // aborted by user
+                return None;
+            }
 
             if !self.backward {
                 // forward search
@@ -85,6 +89,11 @@ impl Search {
                 }
             }
         }
+
+        MessageBox::new("Search", DialogType::Error)
+            .center("Sequence not found!")
+            .button(StdButton::Ok, true)
+            .show();
 
         None
     }

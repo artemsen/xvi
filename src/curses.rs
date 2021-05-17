@@ -78,47 +78,57 @@ impl Curses {
         (nc::getmaxx(wnd) as usize, nc::getmaxy(wnd) as usize)
     }
 
-    /// Poll next event.
-    pub fn poll_event() -> Event {
-        loop {
-            match nc::get_wch() {
-                Some(nc::WchResult::Char(chr)) => {
-                    if chr == 0x1b {
-                        // esc code, read next key - it can be alt+? combination
-                        nc::timeout(10);
-                        let key = nc::get_wch();
-                        nc::timeout(-1);
-                        if let Some(nc::WchResult::Char(chr)) = key {
-                            if let Some(mut key) = Curses::key_from_char(chr) {
-                                key.modifier |= KeyPress::ALT;
-                                return Event::KeyPress(key);
-                            }
+    /// Read next event.
+    fn read_event() -> Option<Event> {
+        match nc::get_wch() {
+            Some(nc::WchResult::Char(chr)) => {
+                if chr == 0x1b {
+                    // esc code, read next key - it can be alt+? combination
+                    nc::timeout(10);
+                    let key = nc::get_wch();
+                    nc::timeout(-1);
+                    if let Some(nc::WchResult::Char(chr)) = key {
+                        if let Some(mut key) = Curses::key_from_char(chr) {
+                            key.modifier |= KeyPress::ALT;
+                            return Some(Event::KeyPress(key));
                         }
-                        return Event::KeyPress(KeyPress::new(Key::Esc, KeyPress::NONE));
                     }
-                    if let Some(key) = Curses::key_from_char(chr) {
-                        return Event::KeyPress(key);
+                    return Some(Event::KeyPress(KeyPress::new(Key::Esc, KeyPress::NONE)));
+                }
+                if let Some(key) = Curses::key_from_char(chr) {
+                    return Some(Event::KeyPress(key));
+                }
+            }
+            Some(nc::WchResult::KeyCode(key)) => match key {
+                nc::KEY_RESIZE => {
+                    return Some(Event::TerminalResize);
+                }
+                _ => {
+                    if let Some(key) = Curses::key_from_code(key) {
+                        return Some(Event::KeyPress(key));
                     }
                 }
-                Some(nc::WchResult::KeyCode(key)) => match key {
-                    nc::KEY_RESIZE => {
-                        return Event::TerminalResize;
-                    }
-                    _ => {
-                        if let Some(key) = Curses::key_from_code(key) {
-                            return Event::KeyPress(key);
-                        } else {
-                            //let name = match nc::keyname(key) {
-                            //    Some(n) => n,
-                            //    None => String::from("?"),
-                            //};
-                            //println!("Unknown key: {} = 0x{:x} = {}", key, key, name);
-                        }
-                    }
-                },
-                None => {}
+            },
+            None => {}
+        }
+        None
+    }
+
+    /// Read next event (blocking).
+    pub fn wait_event() -> Event {
+        loop {
+            if let Some(event) = Curses::read_event() {
+                return event;
             }
         }
+    }
+
+    /// Read next event (non blocking).
+    pub fn peek_event() -> Option<Event> {
+        nc::timeout(0);
+        let event = Curses::read_event();
+        nc::timeout(-1);
+        event
     }
 
     /// Create instance from ncurses code.
