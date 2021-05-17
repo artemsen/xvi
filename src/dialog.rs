@@ -253,7 +253,7 @@ impl Dialog {
     }
 
     /// Draw dialog.
-    fn draw(&self) {
+    pub fn draw(&self) {
         Curses::color_on(if self.dtype == DialogType::Normal {
             Color::DialogNormal
         } else {

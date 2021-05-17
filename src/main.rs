@@ -12,6 +12,7 @@ mod history;
 mod inifile;
 mod messagebox;
 mod page;
+mod progress;
 mod saveas;
 mod search;
 mod view;

@@ -169,9 +169,9 @@ impl<'a> View<'a> {
         let stat = format!(
             " {ch}  0x{offset:04x} = [0x{:02x} {value:<3} 0{value:<3o} {value:08b}]  {percent:>3}%",
             value = value,
-            offset =self.offset,
+            offset = self.offset,
             percent = percent,
-            ch = if self.file.is_modified() {'*'} else {' '}
+            ch = if self.file.is_modified() { '*' } else { ' ' }
         );
         self.scheme
             .statusbar
@@ -248,10 +248,10 @@ impl Config {
     }
 
     /// Show view's configuration dialog.
-    pub fn setup(&mut self) {
-        let mut dlg = Dialog::new(33, 8, DialogType::Normal, "View mode");
-        let fixed = dlg.add_next(Checkbox::new("Fixed width (Shift+F9)", self.fixed_width));
-        let ascii = dlg.add_next(Checkbox::new("Show ASCII field (Alt+F9)", self.ascii));
+    pub fn setup(&mut self) -> bool {
+        let mut dlg = Dialog::new(31, 8, DialogType::Normal, "View mode");
+        let fixed = dlg.add_next(Checkbox::new("Fixed width (16 bytes)", self.fixed_width));
+        let ascii = dlg.add_next(Checkbox::new("Show ASCII field", self.ascii));
         let statusbar = dlg.add_next(Checkbox::new("Show status bar", self.statusbar));
         let keybar = dlg.add_next(Checkbox::new("Show key bar", self.keybar));
         dlg.add_button(Button::std(StdButton::Ok, true));
@@ -271,8 +271,10 @@ impl Config {
                 if let WidgetData::Bool(value) = dlg.get(keybar) {
                     self.keybar = value;
                 }
+                return true;
             }
         }
+        false
     }
 }
 

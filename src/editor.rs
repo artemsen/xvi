@@ -116,18 +116,12 @@ impl Editor {
                 true
             }
             Key::F(9) => {
-                if key.modifier == KeyPress::SHIFT {
-                    self.view_cfg.fixed_width = !self.view_cfg.fixed_width;
-                } else if key.modifier == KeyPress::ALT {
-                    self.view_cfg.ascii = !self.view_cfg.ascii;
-                } else {
-                    self.view_cfg.setup();
+                if self.view_cfg.setup() {
+                    if !self.view_cfg.ascii {
+                        self.cursor.place = Place::Hex;
+                    }
+                    self.move_cursor(Location::Absolute(self.cursor.offset));
                 }
-                if !self.view_cfg.ascii {
-                    self.cursor.place = Place::Hex;
-                }
-                Curses::clear_screen();
-                self.move_cursor(Location::Absolute(self.cursor.offset));
                 true
             }
             Key::Esc | Key::F(10) => {

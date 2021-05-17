@@ -33,6 +33,7 @@ pub trait Widget {
 #[derive(Clone, PartialEq)]
 pub enum WidgetData {
     Text(String),
+    Number(usize),
     Bool(bool),
 }
 
@@ -54,6 +55,16 @@ impl Widget for Text {
     fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
         wnd.print(0, 0, &self.text);
         None
+    }
+
+    fn set_data(&mut self, data: WidgetData) {
+        if let WidgetData::Text(text) = data {
+            self.text = text;
+        }
+    }
+
+    fn get_data(&self) -> WidgetData {
+        WidgetData::Text(self.text.clone())
     }
 }
 
@@ -225,6 +236,42 @@ impl Widget for Checkbox {
 
     fn get_data(&self) -> WidgetData {
         WidgetData::Bool(self.state)
+    }
+}
+
+/// Progress bar.
+pub struct ProgressBar {
+    pub percent: usize,
+}
+
+impl ProgressBar {
+    /// Create new widget instance.
+    pub fn new() -> Box<Self> {
+        Box::new(Self { percent: 0 })
+    }
+}
+
+impl Widget for ProgressBar {
+    fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
+        let text = format!("{:>3}%", self.percent);
+        let bar_len = wnd.width - text.len() - 1;
+        let fill = self.percent as usize * bar_len / 100;
+        let mut bar = (0..fill).map(|_| "▓").collect::<String>();
+        bar += &(fill..bar_len).map(|_| "░").collect::<String>();
+        wnd.print(0, 0, &bar);
+        wnd.print(bar_len + 1, 0, &text);
+        None
+    }
+
+    fn set_data(&mut self, data: WidgetData) {
+        if let WidgetData::Number(n) = data {
+            debug_assert!(n <= 100);
+            self.percent = n;
+        }
+    }
+
+    fn get_data(&self) -> WidgetData {
+        WidgetData::Number(self.percent)
     }
 }
 
