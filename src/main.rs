@@ -105,6 +105,7 @@ fn main() {
     let mut editor = match Editor::new(&file) {
         Ok(editor) => editor,
         Err(err) => {
+            Curses::close();
             eprintln!("{}: {}", err, &file);
             std::process::exit(1);
         }

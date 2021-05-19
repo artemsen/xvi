@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
 /// Edited file.
 pub struct File {
@@ -36,6 +36,9 @@ impl File {
     pub fn open(path: &str) -> io::Result<Self> {
         let file = OpenOptions::new().read(true).open(&path)?;
         let meta = file.metadata()?;
+        if meta.len() == 0 {
+            return Err(Error::new(ErrorKind::UnexpectedEof, "File is empty"));
+        }
         Ok(Self {
             name: String::from(path),
             size: meta.len(),

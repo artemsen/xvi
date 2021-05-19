@@ -165,7 +165,12 @@ impl<'a> View<'a> {
     fn draw_statusbar(&self) {
         // right part: position, current value, etc
         let (value, _) = self.page.get(self.offset).unwrap();
-        let percent = (self.offset * 100 / (self.file.size - 1)) as u8;
+        let percent = (self.offset * 100
+            / if self.file.size > 1 {
+                self.file.size - 1
+            } else {
+                1
+            }) as u8;
         let stat = format!(
             " {ch}  0x{offset:04x} = [0x{:02x} {value:<3} 0{value:<3o} {value:08b}]  {percent:>3}%",
             value = value,
