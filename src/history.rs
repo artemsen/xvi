@@ -1,149 +1,139 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::config::Config;
 use super::inifile::IniFile;
 use std::env;
-use std::fs;
 use std::path::PathBuf;
 
 /// History of editor.
 pub struct History {
-    /// Last used "goto" address.
-    pub last_goto: u64,
-    /// Last used sequence to search.
-    pub last_search: Vec<u8>,
-    /// List of last position in recent files.
-    file_pos: Vec<(String, u64)>,
+    /// INI file with history data.
+    ini: IniFile,
 }
 
 impl History {
-    const GENERAL: &'static str = "gn";
-    const LASTGOTO: &'static str = "lg";
-    const LASTSEARCH: &'static str = "ls";
-    const FILEPOS: &'static str = "fp";
-    const POSNAME: char = 'n';
-    const POSADDR: char = 'a';
+    const GOTO: &'static str = "goto";
+    const SEARCH: &'static str = "search";
+    const FILE: &'static str = "file";
 
-    /// Create instance: load history.
+    /// Create instance: load history file.
     pub fn new() -> Self {
-        let mut instance = Self {
-            file_pos: Vec::new(),
-            last_goto: 0,
-            last_search: Vec::new(),
-        };
-        if let Some(file) = History::ini_file() {
+        if let Some(file) = History::file() {
             if let Ok(ini) = IniFile::load(&file) {
-                // last used "goto" address
-                if let Some(hex) = ini.get(History::GENERAL, History::LASTGOTO) {
-                    if let Ok(addr) = u64::from_str_radix(hex, 16) {
-                        instance.last_goto = addr;
-                    }
+                return Self { ini };
+            }
+        }
+        Self {
+            ini: IniFile::new(),
+        }
+    }
+
+    /// Save history data to the file.
+    pub fn save(&self) {
+        if let Some(file) = History::file() {
+            let _ = self.ini.save(&file);
+        }
+    }
+
+    /// Get list of the last used "goto" addresses.
+    pub fn get_goto(&self) -> Vec<u64> {
+        if let Some(section) = self.ini.sections.get(History::GOTO) {
+            let mut offsets = Vec::with_capacity(section.len());
+            for line in section.iter() {
+                if let Ok(offset) = u64::from_str_radix(line, 16) {
+                    offsets.push(offset);
                 }
-                // last used search sequence
-                if let Some(hex) = ini.get(History::GENERAL, History::LASTSEARCH) {
-                    if hex.len() % 2 == 0 {
-                        for i in (0..hex.len()).step_by(2) {
-                            if let Ok(n) = u8::from_str_radix(&hex[i..i + 2], 16) {
-                                instance.last_search.push(n);
-                            } else {
-                                break;
-                            }
+            }
+            return offsets;
+        }
+        Vec::new()
+    }
+
+    /// Set list of the last used "goto" addresses.
+    pub fn set_goto(&mut self, offsets: &[u64], max: usize) {
+        let ini_list = offsets
+            .iter()
+            .take(max)
+            .map(|o| format!("{:x}", o))
+            .collect();
+        self.ini
+            .sections
+            .insert(History::GOTO.to_string(), ini_list);
+    }
+
+    /// Get list of the last used search sequences.
+    pub fn get_search(&self) -> Vec<Vec<u8>> {
+        if let Some(section) = self.ini.sections.get(History::SEARCH) {
+            let mut searches = Vec::with_capacity(section.len());
+            for line in section.iter() {
+                if line.len() % 2 == 0 {
+                    let mut seq = Vec::with_capacity(line.len() / 2);
+                    for i in (0..line.len()).step_by(2) {
+                        if let Ok(n) = u8::from_str_radix(&line[i..i + 2], 16) {
+                            seq.push(n);
+                        } else {
+                            break;
                         }
                     }
-                }
-                // list of last positions
-                if let Some(section) = ini.sections.get(History::FILEPOS) {
-                    for i in 0..Config::get().filepos {
-                        if let Some(name) = section.get(&format!("{}{}", History::POSNAME, i)) {
-                            if let Some(pos) = section.get(&format!("{}{}", History::POSADDR, i)) {
-                                if let Ok(num) = u64::from_str_radix(pos, 16) {
-                                    instance.file_pos.push((String::from(name), num));
-                                }
-                            }
-                        }
+                    if !seq.is_empty() {
+                        searches.push(seq);
                     }
                 }
             }
+            return searches;
         }
-        instance
+        Vec::new()
     }
 
-    /// Get position for specified file.
-    pub fn get_last_pos(&self, file: &str) -> Option<u64> {
-        let path = History::abs_path(file);
-        for (name, pos) in self.file_pos.iter() {
-            if *name == path {
-                return Some(*pos);
+    /// Set list of the last used search sequences.
+    pub fn set_search(&mut self, sequences: &[Vec<u8>], max: usize) {
+        let mut ini_list = Vec::with_capacity(sequences.len());
+        for seq in sequences.iter().take(max) {
+            ini_list.push(seq.iter().map(|b| format!("{:02x}", b)).collect());
+        }
+        self.ini
+            .sections
+            .insert(History::SEARCH.to_string(), ini_list);
+    }
+
+    /// Get last position for the specified file.
+    pub fn get_filepos(&self, file: &str) -> Option<u64> {
+        if let Some(section) = self.ini.sections.get(History::FILE) {
+            for line in section.iter() {
+                if let Some((path, offset)) = History::filepos(line) {
+                    if path == file {
+                        return Some(offset);
+                    }
+                }
             }
         }
         None
     }
 
-    /// Set position for specified file.
-    pub fn set_last_pos(&mut self, file: &str, pos: u64) {
-        let path = History::abs_path(file);
-        for (index, (name, _)) in self.file_pos.iter().enumerate() {
-            if *name == path {
-                // remove old entry
-                self.file_pos.remove(index);
-                break;
+    /// Add last position for the specified file.
+    pub fn add_filepos(&mut self, file: &str, offset: u64, max: usize) {
+        let section = &mut self
+            .ini
+            .sections
+            .entry(History::FILE.to_string())
+            .or_insert_with(Vec::new);
+
+        // remove previous offset info
+        section.retain(|l| {
+            if let Some((p, _)) = History::filepos(l) {
+                p != file
+            } else {
+                false
             }
-        }
-        self.file_pos.insert(0, (path, pos));
+        });
 
-        let max_pos = Config::get().filepos;
-        if self.file_pos.len() > max_pos {
-            self.file_pos.drain(max_pos..);
-        }
-    }
-
-    /// Save history to the file.
-    pub fn save(&self) {
-        if let Some(file) = History::ini_file() {
-            let mut ini = IniFile::new();
-
-            // last used "goto" address
-            ini.set(
-                History::GENERAL,
-                History::LASTGOTO,
-                &format!("{:x}", self.last_goto),
-            );
-
-            // last used search sequence
-            let mut seq = String::with_capacity(self.last_search.len() * 2);
-            for byte in self.last_search.iter() {
-                seq.push_str(&format!("{:02x}", byte));
-            }
-            ini.set(History::GENERAL, History::LASTSEARCH, &seq);
-
-            // list of last positions
-            for (index, (name, pos)) in self.file_pos.iter().enumerate() {
-                ini.set(
-                    History::FILEPOS,
-                    &format!("{}{}", History::POSNAME, index),
-                    name,
-                );
-                ini.set(
-                    History::FILEPOS,
-                    &format!("{}{}", History::POSADDR, index),
-                    &format!("{:x}", pos),
-                );
-            }
-
-            // create path
-            if let Some(parent) = file.parent() {
-                if !parent.exists() && fs::create_dir(parent).is_err() {
-                    return;
-                }
-            }
-
-            let _ = ini.save(&file);
-        }
+        // insert new record
+        section.insert(0, format!("{}:{:x}", file, offset));
+        section.truncate(max);
     }
 
     /// Get path to the history file.
-    fn ini_file() -> Option<PathBuf> {
+    fn file() -> Option<PathBuf> {
         let dir;
         match env::var("XDG_DATA_HOME") {
             Ok(val) => dir = PathBuf::from(val),
@@ -155,13 +145,14 @@ impl History {
         Some(dir.join("xvi").join("history"))
     }
 
-    /// Get absolute path to the specified file.
-    fn abs_path(file: &str) -> String {
-        if let Ok(path) = PathBuf::from(file).canonicalize() {
-            if let Ok(path) = path.into_os_string().into_string() {
-                return path;
+    /// Split the "file:offset" line into components.
+    fn filepos(line: &str) -> Option<(&str, u64)> {
+        let split: Vec<&str> = line.rsplitn(2, ':').collect();
+        if split.len() == 2 {
+            if let Ok(offset) = u64::from_str_radix(split[0], 16) {
+                return Some((split[1], offset));
             }
         }
-        String::from(file)
+        None
     }
 }

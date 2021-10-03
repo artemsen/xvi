@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::path::PathBuf;
 
 /// Edited file.
 pub struct File {
@@ -33,14 +34,25 @@ impl File {
     const CACHE_SIZE: usize = 4096;
 
     /// Open file.
-    pub fn open(path: &str) -> io::Result<Self> {
-        let file = OpenOptions::new().read(true).open(&path)?;
+    pub fn open(file: &str) -> io::Result<Self> {
+        // get absolute path to the file
+        let abs_path = if let Ok(path) = PathBuf::from(file).canonicalize() {
+            if let Ok(path) = path.into_os_string().into_string() {
+                path
+            } else {
+                file.to_string()
+            }
+        } else {
+                file.to_string()
+        };
+        // open file
+        let file = OpenOptions::new().read(true).open(&abs_path)?;
         let meta = file.metadata()?;
         if meta.len() == 0 {
             return Err(Error::new(ErrorKind::UnexpectedEof, "File is empty"));
         }
         Ok(Self {
-            name: String::from(path),
+            name: abs_path,
             size: meta.len(),
             file,
             cache_data: Vec::new(),

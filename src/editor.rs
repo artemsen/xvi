@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
+use super::config::*;
 use super::curses::*;
 use super::cursor::*;
 use super::dialog::*;
@@ -41,20 +42,32 @@ impl Editor {
             half: HalfByte::Left,
             place: Place::Hex,
         };
+
         let history = History::new();
+        let mut last_goto = history.get_goto();
+        if last_goto.is_empty() {
+            last_goto.push(0);
+        }
+        let mut last_search = history.get_search();
+        if last_search.is_empty() {
+            last_search.push(Vec::new());
+        }
 
         let mut instance = Self {
             cursor,
             file,
             page: PageData::new(u64::MAX, Vec::new()),
             view_cfg: view::Config::new(),
-            last_goto: history.last_goto,
-            search: Search::new(history.last_search),
+            last_goto: last_goto[0],
+            search: Search {
+                data: last_search[0].clone(),
+                backward: false,
+            },
             exit: false,
         };
 
         instance.move_cursor(Location::Absolute(
-            if let Some(offset) = History::new().get_last_pos(&instance.file.name) {
+            if let Some(offset) = history.get_filepos(&instance.file.name) {
                 offset
             } else {
                 0
@@ -416,10 +429,13 @@ impl Editor {
             false
         };
         if self.exit {
+            let config = Config::get();
             let mut history = History::new();
-            history.set_last_pos(&self.file.name, self.cursor.offset);
-            history.last_goto = self.last_goto;
-            history.last_search = self.search.data.clone();
+            history.set_goto(&[self.last_goto], config.last_goto);
+            history.set_search(&[self.search.data.clone()], config.last_search);
+            history.add_filepos(&self.file.name, self.cursor.offset, config.last_filepos);
+            //history.last_goto = self.last_goto;
+            //history.last_search = self.search.data.clone();
             history.save();
         }
     }

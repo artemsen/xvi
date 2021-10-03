@@ -17,12 +17,12 @@ pub struct Search {
 
 impl Search {
     /// Create new instance.
-    pub fn new(default: Vec<u8>) -> Self {
-        Self {
-            data: default,
-            backward: false,
-        }
-    }
+    //pub fn new(default: Vec<u8>) -> Self {
+    //    Self {
+    //        data: default,
+    //        backward: false,
+    //    }
+    //}
 
     /// Find sequence inside the file.
     pub fn find(&self, file: &mut File, start: u64) -> Option<u64> {

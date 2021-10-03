@@ -3,7 +3,6 @@
 
 use super::curses::Color;
 use super::inifile::IniFile;
-use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
 use std::path::PathBuf;
@@ -20,8 +19,13 @@ pub struct Config {
     /// Show/hide key bar.
     pub show_keybar: bool,
 
-    /// Max number of stored file positions.
-    pub filepos: usize,
+    /// Max number of last file positions.
+    pub last_filepos: usize,
+    /// Max number of the last used "goto" addresses.
+    pub last_goto: usize,
+    /// Max number of the last used search sequences.
+    pub last_search: usize,
+
     /// Color scheme.
     pub colors: Vec<(Color, u8, u8)>,
 }
@@ -37,7 +41,9 @@ impl Default for Config {
             show_ascii: true,
             show_statusbar: true,
             show_keybar: true,
-            filepos: 10,
+            last_filepos: 10,
+            last_goto: 10,
+            last_search: 10,
             colors,
         }
     }
@@ -66,7 +72,7 @@ impl Config {
                 Err(_) => PathBuf::new(),
             },
         };
-        let file = dir.join("xvi").join("xvirc");
+        let file = dir.join("xvi").join("config");
         Config::load_file(&file);
     }
 
@@ -74,22 +80,28 @@ impl Config {
     pub fn load_file(file: &Path) {
         if let Ok(ini) = IniFile::load(file) {
             let mut cfg = Config::default();
-            if let Some(val) = ini.get_bool(Config::VIEW, "FixedWidth") {
+            if let Some(val) = ini.get_boolval(Config::VIEW, "FixedWidth") {
                 cfg.fixed_width = val;
             }
-            if let Some(val) = ini.get_bool(Config::VIEW, "ShowAscii") {
+            if let Some(val) = ini.get_boolval(Config::VIEW, "ShowAscii") {
                 cfg.show_ascii = val;
             }
-            if let Some(val) = ini.get_bool(Config::VIEW, "ShowStatusbar") {
+            if let Some(val) = ini.get_boolval(Config::VIEW, "ShowStatusbar") {
                 cfg.show_statusbar = val;
             }
-            if let Some(val) = ini.get_bool(Config::VIEW, "ShowKeybar") {
+            if let Some(val) = ini.get_boolval(Config::VIEW, "ShowKeybar") {
                 cfg.show_keybar = val;
             }
-            if let Some(val) = ini.get_num(Config::HISTORY, "FilePos") {
-                cfg.filepos = val;
+            if let Some(val) = ini.get_numval(Config::HISTORY, "FilePos") {
+                cfg.last_filepos = val;
             }
-            if let Some(val) = ini.get(Config::COLORS, "Theme") {
+            if let Some(val) = ini.get_numval(Config::HISTORY, "Goto") {
+                cfg.last_goto = val;
+            }
+            if let Some(val) = ini.get_numval(Config::HISTORY, "Search") {
+                cfg.last_search = val;
+            }
+            if let Some(val) = ini.get_strval(Config::COLORS, "Theme") {
                 match val.to_lowercase().as_str() {
                     "light" => {
                         cfg.colors = Vec::from(Config::LIGHT_THEME);
@@ -107,41 +119,43 @@ impl Config {
     }
 
     /// Parse color parameters.
-    fn parse_colors(&mut self, section: &BTreeMap<String, String>) {
-        for (key, val) in section.iter() {
-            let id = match key.as_str() {
-                "offsetnormal" => Color::OffsetNormal,
-                "offsethi" => Color::OffsetHi,
-                "hexnormal" => Color::HexNormal,
-                "hexhi" => Color::HexHi,
-                "hexmodified" => Color::HexModified,
-                "hexmodifiedhi" => Color::HexModifiedHi,
-                "asciinormal" => Color::AsciiNormal,
-                "asciihi" => Color::AsciiHi,
-                "asciimodified" => Color::AsciiModified,
-                "asciimodifiedhi" => Color::AsciiModifiedHi,
-                "statusbar" => Color::StatusBar,
-                "keybarid" => Color::KeyBarId,
-                "keybartitle" => Color::KeyBarTitle,
-                "dialognormal" => Color::DialogNormal,
-                "dialogerror" => Color::DialogError,
-                "dialogshadow" => Color::DialogShadow,
-                "itemdisabled" => Color::ItemDisabled,
-                "itemfocused" => Color::ItemFocused,
-                "editnormal" => Color::EditNormal,
-                "editfocused" => Color::EditFocused,
-                "editselection" => Color::EditSelection,
-                _ => {
-                    continue;
-                }
-            };
-            let split: Vec<&str> = val.splitn(2, ',').collect();
-            if split.len() == 2 {
-                if let Ok(fg) = split[0].trim().parse::<u8>() {
-                    if let Ok(bg) = split[1].trim().parse::<u8>() {
-                        // replace color
-                        let index = self.colors.iter().position(|c| c.0 == id).unwrap();
-                        self.colors[index] = (id, fg, bg);
+    fn parse_colors(&mut self, config: &[String]) {
+        for line in config.iter() {
+            if let Some((key, val)) = IniFile::keyval(line) {
+                let id = match key.as_str() {
+                    "offsetnormal" => Color::OffsetNormal,
+                    "offsethi" => Color::OffsetHi,
+                    "hexnormal" => Color::HexNormal,
+                    "hexhi" => Color::HexHi,
+                    "hexmodified" => Color::HexModified,
+                    "hexmodifiedhi" => Color::HexModifiedHi,
+                    "asciinormal" => Color::AsciiNormal,
+                    "asciihi" => Color::AsciiHi,
+                    "asciimodified" => Color::AsciiModified,
+                    "asciimodifiedhi" => Color::AsciiModifiedHi,
+                    "statusbar" => Color::StatusBar,
+                    "keybarid" => Color::KeyBarId,
+                    "keybartitle" => Color::KeyBarTitle,
+                    "dialognormal" => Color::DialogNormal,
+                    "dialogerror" => Color::DialogError,
+                    "dialogshadow" => Color::DialogShadow,
+                    "itemdisabled" => Color::ItemDisabled,
+                    "itemfocused" => Color::ItemFocused,
+                    "editnormal" => Color::EditNormal,
+                    "editfocused" => Color::EditFocused,
+                    "editselection" => Color::EditSelection,
+                    _ => {
+                        continue;
+                    }
+                };
+                let split: Vec<&str> = val.splitn(2, ',').collect();
+                if split.len() == 2 {
+                    if let Ok(fg) = split[0].trim().parse::<u8>() {
+                        if let Ok(bg) = split[1].trim().parse::<u8>() {
+                            // replace color
+                            let index = self.colors.iter().position(|c| c.0 == id).unwrap();
+                            self.colors[index] = (id, fg, bg);
+                        }
                     }
                 }
             }
