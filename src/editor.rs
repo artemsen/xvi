@@ -48,10 +48,6 @@ impl Editor {
         if last_goto.is_empty() {
             last_goto.push(0);
         }
-        let mut last_search = history.get_search();
-        if last_search.is_empty() {
-            last_search.push(Vec::new());
-        }
 
         let mut instance = Self {
             cursor,
@@ -60,7 +56,7 @@ impl Editor {
             view_cfg: view::Config::new(),
             last_goto: last_goto[0],
             search: Search {
-                data: last_search[0].clone(),
+                history: history.get_search(),
                 backward: false,
             },
             exit: false,
@@ -394,7 +390,7 @@ impl Editor {
 
     /// Find next/previous position of the sequence.
     fn find_next(&mut self, backward: bool) {
-        if self.search.data.is_empty() {
+        if self.search.get_sequence().is_none() {
             self.search.backward = backward;
             self.find();
         } else if let Some(offset) = self.search.find(&mut self.file, self.cursor.offset) {
@@ -432,10 +428,8 @@ impl Editor {
             let config = Config::get();
             let mut history = History::new();
             history.set_goto(&[self.last_goto], config.last_goto);
-            history.set_search(&[self.search.data.clone()], config.last_search);
+            history.set_search(&self.search.history, config.last_search);
             history.add_filepos(&self.file.name, self.cursor.offset, config.last_filepos);
-            //history.last_goto = self.last_goto;
-            //history.last_search = self.search.data.clone();
             history.save();
         }
     }

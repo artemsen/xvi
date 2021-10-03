@@ -9,30 +9,22 @@ use super::widget::*;
 
 /// Search properties.
 pub struct Search {
-    /// Sequence to search.
-    pub data: Vec<u8>,
+    /// Search history.
+    pub history: Vec<Vec<u8>>,
     /// Search direction.
     pub backward: bool,
 }
 
 impl Search {
-    /// Create new instance.
-    //pub fn new(default: Vec<u8>) -> Self {
-    //    Self {
-    //        data: default,
-    //        backward: false,
-    //    }
-    //}
-
     /// Find sequence inside the file.
     pub fn find(&self, file: &mut File, start: u64) -> Option<u64> {
-        debug_assert!(!self.data.is_empty());
+        let sequence = self.get_sequence().unwrap();
 
         let mut progress = Progress::new("Search", 0, file.size);
         let mut pval = 0;
 
         let step = 1024;
-        let size = step + self.data.len() as i64;
+        let size = step + sequence.len() as i64;
         let mut offset = start as i64;
 
         if !self.backward {
@@ -73,12 +65,12 @@ impl Search {
             }
 
             let file_data = file.get(offset as u64, size as usize).unwrap();
-            let mut window = file_data.windows(self.data.len());
+            let mut window = file_data.windows(sequence.len());
             if !self.backward {
-                if let Some(pos) = window.position(|wnd| wnd == self.data) {
+                if let Some(pos) = window.position(|wnd| wnd == sequence) {
                     return Some(offset as u64 + pos as u64);
                 }
-            } else if let Some(pos) = window.rposition(|wnd| wnd == self.data) {
+            } else if let Some(pos) = window.rposition(|wnd| wnd == sequence) {
                 return Some(offset as u64 + pos as u64);
             }
 
@@ -100,10 +92,11 @@ impl Search {
 
     /// Show search configuration dialog.
     pub fn configure(&mut self) -> bool {
-        let mut init = String::with_capacity(self.data.len() * 2);
-        for byte in self.data.iter() {
-            init.push_str(&format!("{:02x}", byte));
-        }
+        let init = if let Some(seq) = self.get_sequence() {
+            seq.iter().map(|b| format!("{:02x}", b)).collect()
+        } else {
+            String::new()
+        };
 
         let width = 40;
         let mut dlg = Dialog::new(
@@ -112,8 +105,17 @@ impl Search {
             DialogType::Normal,
             "Search",
         );
+
         dlg.add_next(Text::new("Hex sequence to search:"));
-        let hex = dlg.add_next(Edit::new(width, init, EditFormat::HexStream));
+        let hex_history = self
+            .history
+            .iter()
+            .map(|s| s.iter().map(|b| format!("{:02x}", b)).collect())
+            .collect();
+        let mut hex_widget = Edit::new(width, init, EditFormat::HexStream);
+        hex_widget.history = hex_history;
+        let hex = dlg.add_next(hex_widget);
+
         dlg.add_next(Text::new("ASCII:"));
         let ascii = dlg.add_next(Edit::new(width, String::new(), EditFormat::Any));
         dlg.add_separator();
@@ -152,10 +154,12 @@ impl Search {
                     if value.len() % 2 != 0 {
                         value.push('0');
                     }
-                    self.data = (0..value.len())
+                    let data: Vec<u8> = (0..value.len())
                         .step_by(2)
                         .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
                         .collect();
+                    self.history.retain(|s| s != &data);
+                    self.history.insert(0, data);
                 }
                 if let WidgetData::Bool(value) = dlg.get(backward) {
                     self.backward = value;
@@ -164,6 +168,15 @@ impl Search {
             }
         }
         false
+    }
+
+    /// Get current search sequence.
+    pub fn get_sequence(&self) -> Option<Vec<u8>> {
+        if !self.history.is_empty() {
+            Some(self.history[0].clone())
+        } else {
+            None
+        }
     }
 
     /// Convert from text to byte array.

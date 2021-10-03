@@ -200,12 +200,6 @@ impl Dialog {
                         Key::Tab => {
                             self.move_focus(event.modifier != KeyPress::SHIFT);
                         }
-                        Key::Up => {
-                            self.move_focus(false);
-                        }
-                        Key::Down => {
-                            self.move_focus(true);
-                        }
                         Key::Esc => {
                             break;
                         }
@@ -236,9 +230,9 @@ impl Dialog {
                             if self.focus >= 0 {
                                 if self.items[self.focus as usize].widget.keypress(&event) {
                                     self.apply(self.focus);
-                                } else if event.key == Key::Left {
+                                } else if event.key == Key::Left || event.key == Key::Up {
                                     self.move_focus(false);
-                                } else if event.key == Key::Right {
+                                } else if event.key == Key::Right || event.key == Key::Down {
                                     self.move_focus(true);
                                 }
                             }

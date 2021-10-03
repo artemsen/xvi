@@ -247,7 +247,9 @@ pub struct ProgressBar {
 impl ProgressBar {
     /// Create new widget instance.
     pub fn new() -> Box<Self> {
-        Box::new(Self { percent: usize::MAX })
+        Box::new(Self {
+            percent: usize::MAX,
+        })
     }
 }
 
@@ -288,6 +290,8 @@ pub enum EditFormat {
 /// Single line editor.
 pub struct Edit {
     pub value: String,
+    pub history: Vec<String>,
+    history_index: usize,
     format: EditFormat, // value format
     selection: bool,
     cursor: usize, // cursor position in value string
@@ -300,6 +304,8 @@ impl Edit {
     pub fn new(width: usize, value: String, format: EditFormat) -> Box<Self> {
         Box::new(Self {
             value,
+            history: Vec::new(),
+            history_index: 0,
             format,
             selection: false,
             cursor: 0,
@@ -393,6 +399,20 @@ impl Edit {
         }
     }
 
+    /// Move through history.
+    fn from_history(&mut self, forward: bool) {
+        if forward && self.history_index + 1 < self.history.len() {
+            self.history_index += 1;
+        } else if !forward && self.history_index > 0 {
+            self.history_index -= 1;
+        } else {
+            return;
+        }
+        self.value = self.history[self.history_index].clone();
+        self.move_cursor(isize::max_value());
+        self.selection = true;
+    }
+
     /// Get length of the string in visual characters (grapheme).
     fn length(&self) -> usize {
         UnicodeSegmentation::graphemes(&self.value as &str, true).count()
@@ -451,11 +471,25 @@ impl Widget for Edit {
 
     fn keypress(&mut self, key: &KeyPress) -> bool {
         match key.key {
+            Key::Up => {
+                if key.modifier & KeyPress::CTRL != 0 {
+                    self.from_history(false);
+                    return true;
+                }
+                return false;
+            }
+            Key::Down => {
+                if key.modifier & KeyPress::CTRL != 0 {
+                    self.from_history(true);
+                    return true;
+                }
+                return false;
+            }
             Key::Home => {
-                self.move_cursor(isize::MIN);
+                self.move_cursor(isize::min_value());
             }
             Key::End => {
-                self.move_cursor(isize::MAX);
+                self.move_cursor(isize::max_value());
             }
             Key::Left => {
                 self.move_cursor(-1);

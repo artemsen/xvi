@@ -2,8 +2,8 @@
 
 # This file contains the default configuration.
 # The editor searches for a config file in the following locations:
-# 1. $XDG_CONFIG_HOME/xvi/xvirc
-# 2. $HOME/.config/xvi/xvirc
+# 1. $XDG_CONFIG_HOME/xvi/config
+# 2. $HOME/.config/xvi/config
 
 [View]
 # Enable/disable fixed width mode (16 bytes per line)
@@ -18,6 +18,10 @@ ShowKeybar = 1
 [History]
 # Number of stored recent files with last cursor position
 FilePos = 10
+# Number of stored recent "goto" offsets
+Goto = 10
+# Number of stored recent search sequences
+Search = 10
 
 [Colors]
 # Base color theme (Light or Dark)
