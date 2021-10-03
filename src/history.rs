@@ -156,3 +156,84 @@ impl History {
         None
     }
 }
+
+#[test]
+fn test_set_goto() {
+    let ini = IniFile::new();
+    let mut history = History { ini };
+    history.set_goto(&vec![0x00], 2);
+    assert_eq!(history.get_goto(), vec![0x00]);
+    history.set_goto(&vec![0x1234, 0xabcdef1234567890, 0xabc], 2);
+    assert_eq!(history.get_goto(), vec![0x1234, 0xabcdef1234567890]);
+    assert_eq!(
+        history.ini.sections[History::GOTO],
+        vec!["1234", "abcdef1234567890"]
+    );
+}
+
+#[test]
+fn test_get_search() {
+    let mut ini = IniFile::new();
+    ini.sections.insert(
+        History::SEARCH.to_string(),
+        vec![
+            "abcdef1234567890".to_string(),
+            "112233".to_string(),
+            "1234abc".to_string(), // not even
+            "wtf?".to_string(),    // invalid hex
+        ],
+    );
+    let history = History { ini };
+    assert_eq!(
+        history.get_search(),
+        vec![
+            vec![0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90],
+            vec![0x11, 0x22, 0x33]
+        ]
+    );
+}
+
+#[test]
+fn test_set_search() {
+    let ini = IniFile::new();
+    let mut history = History { ini };
+    history.set_search(&vec![vec![0x00]], 2);
+    assert_eq!(history.get_search(), vec![vec![0x00]]);
+    history.set_search(&vec![vec![0x12, 0x34], vec![0xab]], 2);
+    assert_eq!(history.get_search(), vec![vec![0x12, 0x34], vec![0xab]]);
+    assert_eq!(history.ini.sections[History::SEARCH], vec!["1234", "ab"]);
+}
+
+#[test]
+fn test_get_filepos() {
+    let mut ini = IniFile::new();
+    ini.sections.insert(
+        History::FILE.to_string(),
+        vec![
+            "/path/to/file:123ab".to_string(),
+            "/path/to/fi:le:cdef".to_string(),
+        ],
+    );
+    let history = History { ini };
+    assert_eq!(history.get_filepos("/path/to/file"), Some(0x123ab));
+    assert_eq!(history.get_filepos("/path/to/fi:le"), Some(0xcdef));
+    assert_eq!(history.get_filepos("/not/exists"), None);
+}
+
+#[test]
+fn test_add_filepos() {
+    let ini = IniFile::new();
+    let mut history = History { ini };
+    history.add_filepos("/path/to/file1", 0x112231, 2);
+    history.add_filepos("/path/to/file2", 0x112232, 2);
+    history.add_filepos("/path/to/file3", 0x112233, 2);
+
+    assert_eq!(history.get_filepos("/path/to/file1"), None);
+    assert_eq!(history.get_filepos("/path/to/file2"), Some(0x112232));
+    assert_eq!(history.get_filepos("/path/to/file3"), Some(0x112233));
+
+    assert_eq!(
+        history.ini.sections[History::FILE],
+        vec!["/path/to/file3:112233", "/path/to/file2:112232"]
+    );
+}

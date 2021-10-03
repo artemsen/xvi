@@ -125,3 +125,128 @@ impl IniFile {
         };
     }
 }
+
+#[test]
+fn test_load() {
+    let tmp_file = std::env::temp_dir().join("xvi_test_load.ini");
+    let ini_data = r#"#comment
+[section1]
+[Section2]
+    # c o m m e n t
+Section_line
+Section_line
+[seCTIon3]
+  sectionLine1
+sectionLine2  
+sectionLine3"#;
+    std::fs::write(&tmp_file, ini_data).unwrap();
+
+    let ini = IniFile::load(&tmp_file).unwrap();
+    assert_eq!(ini.sections.len(), 2);
+    assert!(ini.sections.contains_key("section2"));
+    assert_eq!(
+        ini.sections["section2"],
+        vec!["Section_line", "Section_line"]
+    );
+    assert!(ini.sections.contains_key("section3"));
+    assert_eq!(
+        ini.sections["section3"],
+        vec!["sectionLine1", "sectionLine2", "sectionLine3"]
+    );
+
+    std::fs::remove_file(tmp_file).unwrap();
+}
+
+#[test]
+fn test_save() {
+    let mut ini = IniFile::new();
+    ini.sections.insert(
+        "section1".to_string(),
+        vec!["line".to_string(), "line".to_string()],
+    );
+    ini.sections.insert(
+        "section2".to_string(),
+        vec![
+            "line1".to_string(),
+            "line2".to_string(),
+            "line3".to_string(),
+        ],
+    );
+
+    let tmp_file = std::env::temp_dir().join("xvi_test_save.ini");
+    ini.save(&tmp_file).unwrap();
+
+    let ini_data = std::fs::read_to_string(&tmp_file).unwrap();
+    assert_eq!(
+        ini_data,
+        "[section1]\nline\nline\n[section2]\nline1\nline2\nline3\n"
+    );
+
+    std::fs::remove_file(tmp_file).unwrap();
+}
+
+#[test]
+fn test_str_keyval() {
+    let mut ini = IniFile::new();
+
+    ini.set_keyval("Section1", "MyKey", "MyVal");
+    assert_eq!(
+        ini.get_strval("Section1", "MyKey"),
+        Some("MyVal".to_string())
+    );
+
+    // case ignore
+    assert_eq!(
+        ini.get_strval("section1", "mykey"),
+        Some("MyVal".to_string())
+    );
+
+    // not existing
+    assert_eq!(ini.get_strval("section1", "mykey1"), None);
+    assert_eq!(ini.get_strval("section2", "mykey"), None);
+
+    // update
+    ini.set_keyval("section1", "Mykey", "MyVal2");
+    assert_eq!(ini.sections["section1"].len(), 1);
+    assert_eq!(
+        ini.get_strval("section1", "MyKey"),
+        Some("MyVal2".to_string())
+    );
+}
+
+#[test]
+fn test_num_keyval() {
+    let mut ini = IniFile::new();
+    ini.set_keyval("Section1", "MyKey", "123456789");
+    assert_eq!(ini.get_numval("Section1", "MyKey"), Some(123456789));
+}
+
+#[test]
+fn test_bool_keyval() {
+    let mut ini = IniFile::new();
+    ini.set_keyval("Section1", "MyKey", "1");
+    assert_eq!(ini.get_boolval("Section1", "MyKey"), Some(true));
+    ini.set_keyval("Section1", "MyKey", "0");
+    assert_eq!(ini.get_boolval("Section1", "MyKey"), Some(false));
+}
+
+#[test]
+fn test_keyval() {
+    assert_eq!(
+        IniFile::keyval("mykey=myvalue"),
+        Some(("mykey".to_string(), "myvalue".to_string()))
+    );
+    assert_eq!(
+        IniFile::keyval("MyKey=MyValue"),
+        Some(("mykey".to_string(), "MyValue".to_string()))
+    );
+    assert_eq!(
+        IniFile::keyval(" mykey\t  =\tmyvalue\n\n"),
+        Some(("mykey".to_string(), "myvalue".to_string()))
+    );
+    assert_eq!(
+        IniFile::keyval("mykey = myva=lue"),
+        Some(("mykey".to_string(), "myva=lue".to_string()))
+    );
+    assert_eq!(IniFile::keyval("mykeymyvalue"), None);
+}
