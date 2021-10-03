@@ -92,12 +92,6 @@ impl Search {
 
     /// Show search configuration dialog.
     pub fn configure(&mut self) -> bool {
-        let init = if let Some(seq) = self.get_sequence() {
-            seq.iter().map(|b| format!("{:02x}", b)).collect()
-        } else {
-            String::new()
-        };
-
         let width = 40;
         let mut dlg = Dialog::new(
             width + Dialog::PADDING_X * 2,
@@ -107,6 +101,11 @@ impl Search {
         );
 
         dlg.add_next(Text::new("Hex sequence to search:"));
+        let init = if let Some(seq) = self.get_sequence() {
+            seq.iter().map(|b| format!("{:02x}", b)).collect()
+        } else {
+            String::new()
+        };
         let hex_history = self
             .history
             .iter()

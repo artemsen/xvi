@@ -25,9 +25,9 @@ pub struct Editor {
     view_cfg: view::Config,
     /// Cursor position.
     cursor: Cursor,
-    /// Last used "goto" address.
-    last_goto: u64,
-    /// Search data.
+    /// Jump to adddress.
+    goto: Goto,
+    /// Search in file.
     search: Search,
     /// Exit flag.
     exit: bool,
@@ -44,17 +44,15 @@ impl Editor {
         };
 
         let history = History::new();
-        let mut last_goto = history.get_goto();
-        if last_goto.is_empty() {
-            last_goto.push(0);
-        }
 
         let mut instance = Self {
             cursor,
             file,
             page: PageData::new(u64::MAX, Vec::new()),
             view_cfg: view::Config::new(),
-            last_goto: last_goto[0],
+            goto: Goto {
+                history: history.get_goto(),
+            },
             search: Search {
                 history: history.get_search(),
                 backward: false,
@@ -374,9 +372,8 @@ impl Editor {
 
     /// Goto to specified address.
     fn goto(&mut self) {
-        if let Some(offset) = GotoDialog::show(self.last_goto, self.cursor.offset) {
+        if let Some(offset) = self.goto.configure(self.cursor.offset) {
             self.move_cursor(Location::Absolute(offset));
-            self.last_goto = offset;
         }
     }
 
@@ -427,7 +424,7 @@ impl Editor {
         if self.exit {
             let config = Config::get();
             let mut history = History::new();
-            history.set_goto(&[self.last_goto], config.last_goto);
+            history.set_goto(&self.goto.history, config.last_goto);
             history.set_search(&self.search.history, config.last_search);
             history.add_filepos(&self.file.name, self.cursor.offset, config.last_filepos);
             history.save();

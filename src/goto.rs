@@ -5,19 +5,21 @@ use super::curses::Window;
 use super::dialog::*;
 use super::widget::*;
 
-/// "Go to" dialog.
-pub struct GotoDialog;
+/// GoTo properties.
+pub struct Goto {
+    /// Goto history.
+    pub history: Vec<u64>,
+}
 
-impl GotoDialog {
+impl Goto {
     /// Show "Go to" dialog, return absolute address to jump.
-    pub fn show(default: u64, current: u64) -> Option<u64> {
+    pub fn configure(&mut self, current: u64) -> Option<u64> {
         let width = 44;
         let mut dlg = Dialog::new(width + Dialog::PADDING_X * 2, 9, DialogType::Normal, "Goto");
 
         dlg.add_next(Text::new("Absolute offset"));
-        let abshex =
-            GotoDialog::add_edit(&mut dlg, Dialog::PADDING_X, "hex:", EditFormat::HexUnsigned);
-        let absdec = GotoDialog::add_edit(
+        let abshex = self.add_edit(&mut dlg, Dialog::PADDING_X, "hex:", EditFormat::HexUnsigned);
+        let absdec = self.add_edit(
             &mut dlg,
             Dialog::PADDING_X + 23,
             "dec:",
@@ -27,9 +29,8 @@ impl GotoDialog {
 
         dlg.add_separator();
         dlg.add_next(Text::new("Relative offset"));
-        let relhex =
-            GotoDialog::add_edit(&mut dlg, Dialog::PADDING_X, "hex:", EditFormat::HexSigned);
-        let reldec = GotoDialog::add_edit(
+        let relhex = self.add_edit(&mut dlg, Dialog::PADDING_X, "hex:", EditFormat::HexSigned);
+        let reldec = self.add_edit(
             &mut dlg,
             Dialog::PADDING_X + 23,
             "dec:",
@@ -68,14 +69,23 @@ impl GotoDialog {
         let conv = OffsetConverter::new(EditFormat::DecSigned, EditFormat::DecUnsigned, current);
         dlg.rules.push(DialogRule::CopyData(reldec, absdec, conv));
 
-        dlg.set(abshex, WidgetData::Text(format!("{:x}", default)));
+        let init = if !self.history.is_empty() {
+            format!("{:x}", self.history[0])
+        } else {
+            "0".to_string()
+        };
+        dlg.set(abshex, WidgetData::Text(init));
         dlg.apply(abshex);
 
         if let Some(id) = dlg.run() {
             if id != btn_cancel {
                 if let WidgetData::Text(value) = dlg.get(abshex) {
                     return match u64::from_str_radix(&value, 16) {
-                        Ok(offset) => Some(offset),
+                        Ok(offset) => {
+                            self.history.retain(|o| o != &offset);
+                            self.history.insert(0, offset);
+                            Some(offset)
+                        }
                         Err(_) => Some(0),
                     };
                 }
@@ -85,7 +95,7 @@ impl GotoDialog {
     }
 
     /// Add edit field with title.
-    fn add_edit(dlg: &mut Dialog, x: usize, title: &str, fmt: EditFormat) -> ItemId {
+    fn add_edit(&self, dlg: &mut Dialog, x: usize, title: &str, fmt: EditFormat) -> ItemId {
         let text = Window {
             x,
             y: dlg.last_line,
@@ -99,8 +109,16 @@ impl GotoDialog {
             width,
             height: 1,
         };
+
         dlg.add(text, Text::new(title));
-        dlg.add(edit, Edit::new(width, String::new(), fmt))
+
+        let mut widget = Edit::new(width, String::new(), fmt.clone());
+        // todo: refactor the code
+        if fmt == EditFormat::HexUnsigned {
+            let history = self.history.iter().map(|o| format!("{:x}", o)).collect();
+            widget.history = history;
+        }
+        dlg.add(edit, widget)
     }
 }
 

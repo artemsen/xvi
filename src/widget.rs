@@ -278,6 +278,7 @@ impl Widget for ProgressBar {
 }
 
 /// Edit formats.
+#[derive(Clone, PartialEq)]
 pub enum EditFormat {
     Any,
     HexStream,
