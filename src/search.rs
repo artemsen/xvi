@@ -148,18 +148,9 @@ impl Search {
 
         if let Some(id) = dlg.run() {
             if id != btn_cancel {
-                if let WidgetData::Text(value) = dlg.get(hex) {
-                    let mut value = value;
-                    if value.len() % 2 != 0 {
-                        value.push('0');
-                    }
-                    let data: Vec<u8> = (0..value.len())
-                        .step_by(2)
-                        .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
-                        .collect();
-                    self.history.retain(|s| s != &data);
-                    self.history.insert(0, data);
-                }
+                let seq = Search::get_hex(&dlg.get(hex));
+                self.history.retain(|s| s != &seq);
+                self.history.insert(0, seq);
                 if let WidgetData::Bool(value) = dlg.get(backward) {
                     self.backward = value;
                 }
@@ -180,14 +171,14 @@ impl Search {
 
     /// Convert from text to byte array.
     fn get_hex(data: &WidgetData) -> Vec<u8> {
-        let mut array = Vec::new();
         if let WidgetData::Text(value) = data {
-            for it in (0..value.len()).step_by(2) {
-                let hex = &value[it..it + if it + 2 < value.len() { 2 } else { 1 }];
-                array.push(u8::from_str_radix(hex, 16).unwrap())
-            }
+            (0..value.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&value[i..(i + 2).min(value.len())], 16).unwrap())
+                .collect()
+        } else {
+            Vec::new()
         }
-        array
     }
 }
 
@@ -195,14 +186,17 @@ impl Search {
 struct HexToAscii;
 impl CopyData for HexToAscii {
     fn copy_data(&self, data: &WidgetData) -> Option<WidgetData> {
-        let mut ascii = String::new();
-        for c in Search::get_hex(data).iter() {
-            ascii.push(if *c > 0x20 && *c < 0x7f {
-                *c as char
-            } else {
-                '?'
-            });
-        }
+        let seq = Search::get_hex(data);
+        let ascii = seq
+            .iter()
+            .map(|c| {
+                if *c > 0x20 && *c < 0x7f {
+                    *c as char
+                } else {
+                    '?'
+                }
+            })
+            .collect();
         Some(WidgetData::Text(ascii))
     }
 }
