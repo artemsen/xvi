@@ -2,7 +2,7 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use std::collections::BTreeMap;
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -52,6 +52,7 @@ impl IniFile {
 
     /// Save configuration to the file.
     pub fn save(&self, file: &Path) -> io::Result<()> {
+        create_dir_all(file.parent().unwrap())?;
         let mut ini = File::create(file)?;
         for (name, params) in self.sections.iter() {
             ini.write_all(format!("[{}]\n", name).as_bytes())?;
