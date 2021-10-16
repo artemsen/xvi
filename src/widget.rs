@@ -435,12 +435,15 @@ impl Edit {
 impl Widget for Edit {
     fn draw(&self, focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
         // get substring to display
-        let visible_end = self.start + std::cmp::min(self.length() - self.start, self.width);
+        let visible_end = self.start + self.width.min(self.length() - self.start);
         let start = self.char2byte(self.start);
         let end = self.char2byte(visible_end);
         let substr = &self.value[start..end];
 
         wnd.print(0, 0, substr);
+        if !self.history.is_empty() {
+            wnd.print(self.width - 1, 0, "▼");
+        }
         wnd.color(
             0,
             0,
