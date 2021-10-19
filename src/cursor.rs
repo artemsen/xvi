@@ -38,14 +38,19 @@ impl Cursor {
 
         match loc {
             Location::PrevHalf => {
-                if self.offset == 0 || (self.place == Place::Hex && self.half == HalfByte::Right) {
-                    self.half = HalfByte::Left;
-                } else {
+                if self.place == Place::Hex {
+                    if self.half == HalfByte::Right {
+                        self.half = HalfByte::Left;
+                    } else if self.offset != 0 {
+                        self.half = HalfByte::Right;
+                        self.offset -= 1;
+                    }
+                } else if self.offset != 0 {
                     self.half = HalfByte::Left;
                     self.offset -= 1;
-                    if self.offset < new_base {
-                        new_base -= cols as u64;
-                    }
+                }
+                if self.offset < new_base {
+                    new_base -= cols as u64;
                 }
             }
             Location::NextHalf => {
