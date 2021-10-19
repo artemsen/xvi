@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
+use super::ascii::AsciiTable;
 use super::curses::Color;
 use super::inifile::IniFile;
 use std::env;
@@ -12,15 +13,15 @@ use std::sync::{Arc, RwLock};
 pub struct Config {
     /// Line width mode (fixed/dynamic).
     pub fixed_width: bool,
-    /// Show/hide ascii field.
-    pub show_ascii: bool,
+    /// ASCII field charset.
+    pub ascii_charset: Option<&'static AsciiTable>,
     /// Show/hide status bar.
     pub show_statusbar: bool,
     /// Show/hide key bar.
     pub show_keybar: bool,
 
     /// Max number of last file positions.
-    pub last_filepos: usize,
+    pub last_file: usize,
     /// Max number of the last used "goto" addresses.
     pub last_goto: usize,
     /// Max number of the last used search sequences.
@@ -38,10 +39,10 @@ impl Default for Config {
         }
         Self {
             fixed_width: false,
-            show_ascii: true,
+            ascii_charset: AsciiTable::default(),
             show_statusbar: true,
             show_keybar: true,
-            last_filepos: 10,
+            last_file: 10,
             last_goto: 10,
             last_search: 10,
             colors,
@@ -83,17 +84,21 @@ impl Config {
             if let Some(val) = ini.get_boolval(Config::VIEW, "FixedWidth") {
                 cfg.fixed_width = val;
             }
-            if let Some(val) = ini.get_boolval(Config::VIEW, "ShowAscii") {
-                cfg.show_ascii = val;
+            if let Some(val) = ini.get_strval(Config::VIEW, "Ascii") {
+                if val == "none" {
+                    cfg.ascii_charset = None;
+                } else if let Some(table) = AsciiTable::from_id(&val) {
+                    cfg.ascii_charset = Some(table);
+                }
             }
-            if let Some(val) = ini.get_boolval(Config::VIEW, "ShowStatusbar") {
+            if let Some(val) = ini.get_boolval(Config::VIEW, "Statusbar") {
                 cfg.show_statusbar = val;
             }
-            if let Some(val) = ini.get_boolval(Config::VIEW, "ShowKeybar") {
+            if let Some(val) = ini.get_boolval(Config::VIEW, "Keybar") {
                 cfg.show_keybar = val;
             }
-            if let Some(val) = ini.get_numval(Config::HISTORY, "FilePos") {
-                cfg.last_filepos = val;
+            if let Some(val) = ini.get_numval(Config::HISTORY, "File") {
+                cfg.last_file = val;
             }
             if let Some(val) = ini.get_numval(Config::HISTORY, "Goto") {
                 cfg.last_goto = val;

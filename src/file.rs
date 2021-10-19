@@ -43,7 +43,7 @@ impl File {
                 file.to_string()
             }
         } else {
-                file.to_string()
+            file.to_string()
         };
         // open file
         let file = OpenOptions::new().read(true).open(&abs_path)?;

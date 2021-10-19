@@ -8,16 +8,16 @@
 [View]
 # Enable/disable fixed width mode (16 bytes per line)
 FixedWidth = 0
-# Show/hide ASCII field
-ShowAscii = 1
+# ASCII field charset (none, 437, 1251, ascii or named)
+Ascii = 437
 # Show/hide status bar
-ShowStatusbar = 1
+Statusbar = 1
 # Show/hide key bar
-ShowKeybar = 1
+Keybar = 1
 
 [History]
 # Number of stored recent files with last cursor position
-FilePos = 10
+File = 10
 # Number of stored recent "goto" offsets
 Goto = 10
 # Number of stored recent search sequences
@@ -41,7 +41,7 @@ StatusBar =       242, 236
 KeyBarId =        242, 233
 KeyBarTitle =     242, 236
 DialogNormal =    235, 245
-DialogError =     250, 88
+DialogError =     250,  88
 DialogShadow =    237, 232
 ItemDisabled =    239, 245
 ItemFocused =     250, 238

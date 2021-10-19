@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
+use super::ascii::*;
 use super::config;
 use super::curses::{Color, Curses, Window};
 use super::dialog::*;
 use super::file::File;
 use super::page::PageData;
 use super::widget::*;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Hex document view.
 pub struct View<'a> {
@@ -17,27 +19,6 @@ pub struct View<'a> {
     pub offset: u64,
 }
 impl<'a> View<'a> {
-    /// ASCII view table (Code page 437).
-    #[rustfmt::skip]
-    const CP437: &'static [char] = &[
-        ' ', '☺', '☻', '♥', '♦', '♣', '♠', '•', '◘', '○', '◙', '♂', '♀', '♪', '♫', '☼',
-        '►', '◄', '↕', '‼', '¶', '§', '▬', '↨', '↑', '↓', '→', '←', '∟', '↔', '▲', '▼',
-        ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?',
-        '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O',
-        'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_',
-        '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
-        'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '~', '⌂',
-        'Ç', 'ü', 'é', 'â', 'ä', 'à', 'å', 'ç', 'ê', 'ë', 'è', 'ï', 'î', 'ì', 'Ä', 'Å',
-        'É', 'æ', 'Æ', 'ô', 'ö', 'ò', 'û', 'ù', 'ÿ', 'Ö', 'Ü', '¢', '£', '¥', '₧', 'ƒ',
-        'á', 'í', 'ó', 'ú', 'ñ', 'Ñ', 'ª', 'º', '¿', '⌐', '¬', '½', '¼', '¡', '«', '»',
-        '░', '▒', '▓', '│', '┤', '╡', '╢', '╖', '╕', '╣', '║', '╗', '╝', '╜', '╛', '┐',
-        '└', '┴', '┬', '├', '─', '┼', '╞', '╟', '╚', '╔', '╩', '╦', '╠', '═', '╬', '╧',
-        '╨', '╤', '╥', '╙', '╘', '╒', '╓', '╫', '╪', '┘', '┌', '█', '▄', '▌', '▐', '▀',
-        'α', 'ß', 'Γ', 'π', 'Σ', 'σ', 'µ', 'τ', 'Φ', 'Θ', 'Ω', 'δ', '∞', 'φ', 'ε', '∩',
-        '≡', '±', '≥', '≤', '⌠', '⌡', '÷', '≈', '°', '∙', '·', '√', 'ⁿ', '²', '■', ' ',
-    ];
-
     /// Print page view (offset/hex/ascii).
     pub fn draw(&self) {
         if self.config.statusbar {
@@ -45,7 +26,7 @@ impl<'a> View<'a> {
         }
         self.draw_offsets();
         self.draw_hexdump();
-        if self.config.ascii {
+        if self.config.ascii.is_some() {
             self.draw_ascii();
         }
         if self.config.keybar {
@@ -131,7 +112,7 @@ impl<'a> View<'a> {
                 let offset = self.page.offset + (y * self.scheme.ascii.width + x) as u64;
                 let (chr, color) = if let Some((byte, state)) = self.page.get(offset) {
                     (
-                        View::CP437[byte as usize],
+                        self.config.ascii.unwrap().table[byte as usize],
                         if state & PageData::CHANGED != 0 {
                             if y == curr_y || x == curr_x {
                                 Color::AsciiModifiedHi
@@ -163,7 +144,7 @@ impl<'a> View<'a> {
 
     /// Draw status bar.
     fn draw_statusbar(&self) {
-        // right part: position, current value, etc
+        // right part: charset, position, etc
         let (value, _) = self.page.get(self.offset).unwrap();
         let percent = (self.offset * 100
             / if self.file.size > 1 {
@@ -171,28 +152,53 @@ impl<'a> View<'a> {
             } else {
                 1
             }) as u8;
-        let stat = format!(
-            " {ch}  0x{offset:04x} = [0x{:02x} {value:<3} 0{value:<3o} {value:08b}]  {percent:>3}%",
-            value = value,
+        let mut stat = String::new();
+        if let Some(table) = self.config.ascii {
+            stat = format!(" │ {}", table.id);
+        };
+        stat += &format!(
+            " │ 0x{offset:04x} = 0x{:02x} {value:<3} 0{value:<3o} {value:08b} │ {percent:>3}%",
             offset = self.offset,
-            percent = percent,
-            ch = if self.file.is_modified() { '*' } else { ' ' }
+            value = value,
+            percent = percent
         );
+        let stat_len = stat.graphemes(true).count();
         self.scheme
             .statusbar
-            .print(self.scheme.statusbar.width - stat.len(), 0, &stat);
+            .print(self.scheme.statusbar.width - stat_len, 0, &stat);
 
         // left part: file name
-        let max_len = self.scheme.statusbar.width - stat.len();
-        if self.file.name.len() <= max_len {
-            self.scheme.statusbar.print(0, 0, &self.file.name);
+        let mut name: String;
+        let max_len = self.scheme.statusbar.width - stat_len;
+        let name_len = self.file.name.graphemes(true).count();
+        if name_len <= max_len {
+            name = self.file.name.clone();
         } else {
-            let mut name = String::from(&self.file.name[..3]);
-            name.push('…');
-            let vs = self.file.name.len() - max_len + 4;
-            name.push_str(&self.file.name[vs..]);
-            self.scheme.statusbar.print(0, 0, &name);
+            // range replaced by a dilimeter
+            let cut_start = 3;
+            let cut_end = name_len - max_len + cut_start + 1 /* delimiter */;
+            let (index, grapheme) = self
+                .file
+                .name
+                .grapheme_indices(true)
+                .nth(cut_start)
+                .expect("Invalid position");
+            let pos = index + grapheme.len();
+            name = String::from(&self.file.name[..pos]);
+            name.push('…'); // delimiter between file path parts
+            let (index, grapheme) = self
+                .file
+                .name
+                .grapheme_indices(true)
+                .nth(cut_end)
+                .expect("Invalid position");
+            let pos = index + grapheme.len();
+            name.push_str(&self.file.name[pos..]);
         }
+        if self.file.is_modified() {
+            name.push('*');
+        }
+        self.scheme.statusbar.print(0, 0, &name);
 
         self.scheme
             .statusbar
@@ -234,8 +240,8 @@ impl<'a> View<'a> {
 pub struct Config {
     /// Line width mode (fixed/dynamic).
     pub fixed_width: bool,
-    /// Show/hide ascii field.
-    pub ascii: bool,
+    /// ASCII characters table.
+    pub ascii: Option<&'static AsciiTable>,
     /// Show/hide status bar.
     pub statusbar: bool,
     /// Show/hide key bar.
@@ -246,7 +252,7 @@ impl Config {
         let cfg = config::Config::get();
         Self {
             fixed_width: cfg.fixed_width,
-            ascii: cfg.show_ascii,
+            ascii: cfg.ascii_charset,
             statusbar: cfg.show_statusbar,
             keybar: cfg.show_keybar,
         }
@@ -254,21 +260,41 @@ impl Config {
 
     /// Show view's configuration dialog.
     pub fn setup(&mut self) -> bool {
-        let mut dlg = Dialog::new(31, 8, DialogType::Normal, "View mode");
+        let mut dlg = Dialog::new(31, 10, DialogType::Normal, "View mode");
         let fixed = dlg.add_next(Checkbox::new("Fixed width (16 bytes)", self.fixed_width));
-        let ascii = dlg.add_next(Checkbox::new("Show ASCII field", self.ascii));
         let statusbar = dlg.add_next(Checkbox::new("Show status bar", self.statusbar));
         let keybar = dlg.add_next(Checkbox::new("Show key bar", self.keybar));
+        dlg.add_separator();
+        dlg.add_next(Text::new("ASCII field:"));
+
+        let mut select = 0;
+        let mut tables = Vec::with_capacity(ASCII_TABLES.len() + 1 /* None */);
+        tables.push("None (hide)".to_string());
+        for (index, table) in ASCII_TABLES.iter().enumerate() {
+            tables.push(table.name.to_string());
+            if let Some(current) = self.ascii {
+                if current.id == table.id {
+                    select = index + 1 /* "None (hide)" */;
+                }
+            }
+        }
+        let ascii = dlg.add_next(Listbox::new(tables, select));
+
         dlg.add_button(Button::std(StdButton::Ok, true));
         let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
         dlg.cancel = btn_cancel;
+
         if let Some(id) = dlg.run() {
             if id != btn_cancel {
                 if let WidgetData::Bool(value) = dlg.get(fixed) {
                     self.fixed_width = value;
                 }
-                if let WidgetData::Bool(value) = dlg.get(ascii) {
-                    self.ascii = value;
+                if let WidgetData::Number(value) = dlg.get(ascii) {
+                    self.ascii = if value == 0 {
+                        None
+                    } else {
+                        ASCII_TABLES.get(value - 1)
+                    }
                 }
                 if let WidgetData::Bool(value) = dlg.get(statusbar) {
                     self.statusbar = value;
@@ -326,7 +352,7 @@ impl Scheme {
                 + (Scheme::BYTES_IN_WORD - 1) * Scheme::BYTE_MARGIN
                 + Scheme::WORD_MARGIN;
 
-            let ascii_width = if config.ascii {
+            let ascii_width = if config.ascii.is_some() {
                 Scheme::BYTES_IN_WORD
             } else {
                 0
@@ -335,7 +361,7 @@ impl Scheme {
 
             // available space
             let mut free_space = wnd.width - offlen - Scheme::FIELD_MARGIN;
-            if config.ascii {
+            if config.ascii.is_some() {
                 free_space -= Scheme::FIELD_MARGIN - Scheme::WORD_MARGIN;
             } else {
                 free_space += Scheme::WORD_MARGIN;
@@ -357,7 +383,7 @@ impl Scheme {
         // increase the offset length if possible
         if offlen < 8 {
             let mut free_space = wnd.width - offlen - Scheme::FIELD_MARGIN - hex_width;
-            if config.ascii {
+            if config.ascii.is_some() {
                 free_space -= Scheme::FIELD_MARGIN + columns;
             }
             offlen += std::cmp::min(8 - offlen, free_space);

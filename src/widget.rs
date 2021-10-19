@@ -208,11 +208,7 @@ impl Widget for Checkbox {
         } else if !enabled {
             wnd.color(0, 0, 3, Color::ItemDisabled);
         }
-        if focused {
-            Some(1)
-        } else {
-            None
-        }
+        None
     }
 
     fn focusable(&self) -> bool {
@@ -236,6 +232,72 @@ impl Widget for Checkbox {
 
     fn get_data(&self) -> WidgetData {
         WidgetData::Bool(self.state)
+    }
+}
+
+/// One-line listbox.
+pub struct Listbox {
+    list: Vec<String>,
+    current: usize,
+}
+
+impl Listbox {
+    /// Create new widget instance.
+    pub fn new(list: Vec<String>, current: usize) -> Box<Self> {
+        debug_assert!(!list.is_empty());
+        Box::new(Self { list, current })
+    }
+}
+
+impl Widget for Listbox {
+    fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize> {
+        let text = format!(
+            "{: ^width$}",
+            self.list[self.current],
+            width = wnd.width - 2
+        );
+        wnd.print(0, 0, "◄");
+        wnd.print(wnd.width - 1, 0, "►");
+        wnd.print(1, 0, &text);
+        if focused {
+            wnd.color(0, 0, wnd.width, Color::ItemFocused);
+        } else if !enabled {
+            wnd.color(0, 0, wnd.width, Color::ItemDisabled);
+        }
+        None
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+
+    fn keypress(&mut self, key: &KeyPress) -> bool {
+        match key.key {
+            Key::Left => {
+                if self.current > 0 {
+                    self.current -= 1;
+                }
+            }
+            Key::Right => {
+                if self.current < self.list.len() - 1 {
+                    self.current += 1;
+                }
+            }
+            _ => {
+                return false;
+            }
+        };
+        true
+    }
+
+    fn set_data(&mut self, data: WidgetData) {
+        if let WidgetData::Number(current) = data {
+            self.current = current;
+        }
+    }
+
+    fn get_data(&self) -> WidgetData {
+        WidgetData::Number(self.current)
     }
 }
 
@@ -416,14 +478,16 @@ impl Edit {
 
     /// Get length of the string in visual characters (grapheme).
     fn length(&self) -> usize {
-        UnicodeSegmentation::graphemes(&self.value as &str, true).count()
+        self.value.graphemes(true).count()
     }
 
     /// Convert char (grapheme) position to byte offset inside the value.
     fn char2byte(&self, char_pos: usize) -> usize {
         let mut byte_pos = 0;
         if char_pos > 0 {
-            let (i, gr) = UnicodeSegmentation::grapheme_indices(&self.value as &str, true)
+            let (i, gr) = self
+                .value
+                .grapheme_indices(true)
                 .nth(char_pos - 1)
                 .expect("Invalid position");
             byte_pos = i + gr.len();

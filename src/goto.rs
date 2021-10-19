@@ -142,11 +142,11 @@ impl CopyData for OffsetConverter {
                 EditFormat::Any => unreachable!(),
                 EditFormat::HexStream => unreachable!(),
                 EditFormat::HexSigned => {
-                    self.current as i64 + i64::from_str_radix(&value, 16).unwrap_or(0)
+                    self.current as i64 + i64::from_str_radix(value, 16).unwrap_or(0)
                 }
-                EditFormat::HexUnsigned => i64::from_str_radix(&value, 16).unwrap_or(0),
-                EditFormat::DecSigned => self.current as i64 + (&value).parse::<i64>().unwrap_or(0),
-                EditFormat::DecUnsigned => (&value).parse::<i64>().unwrap_or(0),
+                EditFormat::HexUnsigned => i64::from_str_radix(value, 16).unwrap_or(0),
+                EditFormat::DecSigned => self.current as i64 + value.parse::<i64>().unwrap_or(0),
+                EditFormat::DecUnsigned => value.parse::<i64>().unwrap_or(0),
             };
             let dst = match self.dst {
                 EditFormat::Any => unreachable!(),

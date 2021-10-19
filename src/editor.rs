@@ -124,7 +124,7 @@ impl Editor {
             }
             Key::F(9) => {
                 if self.view_cfg.setup() {
-                    if !self.view_cfg.ascii {
+                    if self.view_cfg.ascii.is_none() {
                         self.cursor.place = Place::Hex;
                     }
                     self.move_cursor(Location::Absolute(self.cursor.offset));
@@ -136,7 +136,7 @@ impl Editor {
                 true
             }
             Key::Tab => {
-                if self.view_cfg.ascii {
+                if self.view_cfg.ascii.is_some() {
                     self.cursor.switch_place();
                 }
                 true
@@ -426,7 +426,7 @@ impl Editor {
             let mut history = History::new();
             history.set_goto(&self.goto.history, config.last_goto);
             history.set_search(&self.search.history, config.last_search);
-            history.add_filepos(&self.file.name, self.cursor.offset, config.last_filepos);
+            history.add_filepos(&self.file.name, self.cursor.offset, config.last_file);
             history.save();
         }
     }
