@@ -2,96 +2,19 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::dialog::*;
-use super::file::File;
-use super::messagebox::MessageBox;
-use super::progress::Progress;
 use super::widget::*;
 
-/// Search properties.
-pub struct Search {
+/// Dialog for configuring search parameters.
+pub struct SearchDlg {
     /// Search history.
     pub history: Vec<Vec<u8>>,
     /// Search direction.
     pub backward: bool,
 }
 
-impl Search {
-    /// Find sequence inside the file.
-    pub fn find(&self, file: &mut File, start: u64) -> Option<u64> {
-        let sequence = self.get_sequence().unwrap();
-
-        let mut progress = Progress::new("Search", 0, file.size);
-        let mut pval = 0;
-
-        let step = 1024;
-        let size = step + sequence.len() as i64;
-        let mut offset = start as i64;
-
-        if !self.backward {
-            offset += 1;
-        } else {
-            offset -= 1;
-        }
-
-        let mut round = false;
-
-        loop {
-            pval += step as u64;
-            if !progress.update(std::cmp::min(pval, file.size)) {
-                // aborted by user
-                return None;
-            }
-
-            if !self.backward {
-                // forward search
-                if offset as u64 >= file.size {
-                    offset = 0;
-                    round = true;
-                }
-            } else {
-                // backward search
-                if round && (offset as u64) < start {
-                    break;
-                }
-                offset -= size;
-                if offset < 0 {
-                    if file.size < size as u64 {
-                        offset = 0;
-                    } else {
-                        offset = file.size as i64 - size;
-                    }
-                    round = true;
-                }
-            }
-
-            let file_data = file.get(offset as u64, size as usize).unwrap();
-            let mut window = file_data.windows(sequence.len());
-            if !self.backward {
-                if let Some(pos) = window.position(|wnd| wnd == sequence) {
-                    return Some(offset as u64 + pos as u64);
-                }
-            } else if let Some(pos) = window.rposition(|wnd| wnd == sequence) {
-                return Some(offset as u64 + pos as u64);
-            }
-
-            if !self.backward {
-                offset += step;
-                if round && offset as u64 >= start {
-                    break;
-                }
-            }
-        }
-
-        MessageBox::new("Search", DialogType::Error)
-            .center("Sequence not found!")
-            .button(StdButton::Ok, true)
-            .show();
-
-        None
-    }
-
-    /// Show search configuration dialog.
-    pub fn configure(&mut self) -> bool {
+impl SearchDlg {
+    /// Show configuration dialog.
+    pub fn show(&mut self) -> bool {
         let width = 40;
         let mut dlg = Dialog::new(
             width + Dialog::PADDING_X * 2,
@@ -148,7 +71,7 @@ impl Search {
 
         if let Some(id) = dlg.run() {
             if id != btn_cancel {
-                let seq = Search::get_hex(&dlg.get(hex));
+                let seq = SearchDlg::get_hex(&dlg.get(hex));
                 self.history.retain(|s| s != &seq);
                 self.history.insert(0, seq);
                 if let WidgetData::Bool(value) = dlg.get(backward) {
@@ -186,7 +109,7 @@ impl Search {
 struct HexToAscii;
 impl CopyData for HexToAscii {
     fn copy_data(&self, data: &WidgetData) -> Option<WidgetData> {
-        let seq = Search::get_hex(data);
+        let seq = SearchDlg::get_hex(data);
         let ascii = seq
             .iter()
             .map(|c| {

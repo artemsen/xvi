@@ -1,100 +1,117 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::config::*;
+use super::config::Config;
 use super::curses::*;
 use super::cursor::*;
-use super::dialog::*;
-use super::file::*;
-use super::goto::*;
+use super::document::Document;
 use super::history::*;
-use super::messagebox::*;
-use super::page::*;
-use super::saveas::*;
-use super::search::*;
-use super::view;
-use super::widget::*;
+use super::ui::dialog::*;
+use super::ui::goto::GotoDlg;
+use super::ui::messagebox::*;
+use super::ui::progress::ProgressDlg;
+use super::ui::saveas::*;
+use super::ui::search::*;
+use super::ui::setup::SetupDlg;
+use super::ui::widget::*;
+use super::view::View;
 
 /// Editor: implements business logic of a hex editor.
 pub struct Editor {
-    /// Edited file.
-    file: File,
-    /// Currently loaded and edited data.
-    page: PageData,
-    /// Configuration of the view mode.
-    view_cfg: view::Config,
-    /// Cursor position.
-    cursor: Cursor,
-    /// Jump to adddress.
-    goto: Goto,
-    /// Search in file.
-    search: Search,
-    /// Exit flag.
-    exit: bool,
+    /// Editable document.
+    document: Document,
+    /// View of the document.
+    view: View,
+
+    /// "Goto" configuration dialog.
+    goto: GotoDlg,
+    /// Search configuration dialog.
+    search: SearchDlg,
+    /// View mode setup dialog.
+    setup: SetupDlg,
 }
 
 impl Editor {
     /// Create new editor instance.
-    pub fn new(path: &str) -> Result<Self, std::io::Error> {
-        let file = File::open(path)?;
-        let cursor = Cursor {
-            offset: u64::MAX,
-            half: HalfByte::Left,
-            place: Place::Hex,
-        };
-
+    pub fn new(path: &str, offset: Option<u64>, config: &Config) -> Result<Self, std::io::Error> {
         let history = History::new();
 
-        let mut instance = Self {
-            cursor,
-            file,
-            page: PageData::new(u64::MAX, Vec::new()),
-            view_cfg: view::Config::new(),
-            goto: Goto {
-                history: history.get_goto(),
-            },
-            search: Search {
-                history: history.get_search(),
-                backward: false,
-            },
-            exit: false,
+        let document = Document::new(path)?;
+
+        let mut view = View::new(document.size);
+        view.fixed_width = config.fixed_width;
+        view.ascii_table = config.ascii_table;
+
+        let goto = GotoDlg {
+            history: history.get_goto(),
+        };
+        let search = SearchDlg {
+            history: history.get_search(),
+            backward: false,
+        };
+        let setup = SetupDlg {
+            fixed_width: config.fixed_width,
+            ascii_table: config.ascii_table,
         };
 
-        instance.move_cursor(Location::Absolute(
-            if let Some(offset) = history.get_filepos(&instance.file.name) {
-                offset
-            } else {
-                0
-            },
-        ));
+        let mut instance = Self {
+            document,
+            view,
+            goto,
+            search,
+            setup,
+        };
+
+        let initial_offset = if let Some(offset) = offset {
+            offset
+        } else if let Some(offset) = history.get_filepos(&instance.document.path) {
+            offset
+        } else {
+            0
+        };
+        instance.document.cursor.offset = initial_offset;
+        instance.resize();
 
         Ok(instance)
     }
 
     /// Run editor.
-    pub fn run(&mut self, offset: Option<u64>) {
-        if let Some(offset) = offset {
-            self.move_cursor(Location::Absolute(offset));
-        }
-        while !self.exit {
+    pub fn run(&mut self) {
+        loop {
             // redraw
             self.draw();
 
             // handle next event
             match Curses::wait_event() {
                 Event::TerminalResize => {
-                    Curses::clear_screen();
-                    self.move_cursor(Location::Absolute(self.cursor.offset));
+                    self.resize();
                 }
-                Event::KeyPress(key) => {
-                    self.handle_key(key);
-                }
+                Event::KeyPress(key) => match key.key {
+                    Key::Esc | Key::F(10) => {
+                        if self.exit() {
+                            return;
+                        }
+                    }
+                    _ => {
+                        self.handle_key(key);
+                    }
+                },
             }
         }
     }
 
+    /// Screen resize handler.
+    fn resize(&mut self) {
+        Curses::clear_screen();
+        let mut screen = Curses::get_screen();
+        screen.height -= 1; // key bar
+        self.view.resize(&screen);
+        self.document
+            .resize_page(self.view.lines, self.view.columns);
+    }
+
     /// External event handler, called on key press.
-    pub fn handle_key(&mut self, key: KeyPress) {
+    fn handle_key(&mut self, key: KeyPress) {
         let handled = match key.key {
             Key::F(1) => {
                 self.help();
@@ -123,87 +140,90 @@ impl Editor {
                 true
             }
             Key::F(9) => {
-                if self.view_cfg.setup() {
-                    if self.view_cfg.ascii.is_none() {
-                        self.cursor.place = Place::Hex;
+                if self.setup.show() {
+                    let resize = self.view.fixed_width != self.setup.fixed_width;
+                    if resize {
+                        self.view.fixed_width = self.setup.fixed_width;
                     }
-                    self.move_cursor(Location::Absolute(self.cursor.offset));
+                    self.view.ascii_table = self.setup.ascii_table;
+                    if self.view.ascii_table.is_none() {
+                        self.document.cursor.place = Place::Hex;
+                    }
+                    if resize {
+                        self.resize();
+                    }
                 }
                 true
             }
-            Key::Esc | Key::F(10) => {
-                self.exit();
-                true
-            }
             Key::Tab => {
-                if self.view_cfg.ascii.is_some() {
-                    self.cursor.switch_place();
+                if self.view.ascii_table.is_some() {
+                    self.document.cursor.switch_place();
                 }
                 true
             }
             Key::Left => {
                 if key.modifier == KeyPress::NONE {
-                    self.move_cursor(Location::PrevByte);
+                    self.document.move_cursor(Direction::PrevByte);
                 } else if key.modifier == KeyPress::SHIFT {
-                    self.move_cursor(Location::PrevHalf);
+                    self.document.move_cursor(Direction::PrevHalf);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.move_cursor(Location::PrevWord);
+                    self.document.move_cursor(Direction::PrevWord);
                 }
                 true
             }
             Key::Right => {
                 if key.modifier == KeyPress::NONE {
-                    self.move_cursor(Location::NextByte);
+                    self.document.move_cursor(Direction::NextByte);
                 } else if key.modifier == KeyPress::SHIFT {
-                    self.move_cursor(Location::NextHalf);
+                    self.document.move_cursor(Direction::NextHalf);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.move_cursor(Location::NextWord);
+                    self.document.move_cursor(Direction::NextWord);
                 }
                 true
             }
             Key::Up => {
                 if key.modifier == KeyPress::NONE {
-                    self.move_cursor(Location::LineUp);
+                    self.document.move_cursor(Direction::LineUp);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.move_cursor(Location::ScrollUp);
+                    self.document.move_cursor(Direction::ScrollUp);
                 }
                 true
             }
             Key::Down => {
                 if key.modifier == KeyPress::NONE {
-                    self.move_cursor(Location::LineDown);
+                    self.document.move_cursor(Direction::LineDown);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.move_cursor(Location::ScrollDown);
+                    self.document.move_cursor(Direction::ScrollDown);
                 }
                 true
             }
             Key::Home => {
                 if key.modifier == KeyPress::NONE {
-                    self.move_cursor(Location::LineBegin);
+                    self.document.move_cursor(Direction::LineBegin);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.move_cursor(Location::FileBegin);
+                    self.document.move_cursor(Direction::FileBegin);
                 }
                 true
             }
             Key::End => {
                 if key.modifier == KeyPress::NONE {
-                    self.move_cursor(Location::LineEnd);
+                    self.document.move_cursor(Direction::LineEnd);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.move_cursor(Location::FileEnd);
+                    self.document.move_cursor(Direction::FileEnd);
                 }
                 true
             }
             Key::PageUp => {
-                self.move_cursor(Location::PageUp);
+                self.document.move_cursor(Direction::PageUp);
                 true
             }
             Key::PageDown => {
-                self.move_cursor(Location::PageDown);
+                self.document.move_cursor(Direction::PageDown);
                 true
             }
             Key::Char('z') => {
                 if key.modifier == KeyPress::CTRL {
-                    self.undo();
+                    self.document.undo();
                     true
                 } else {
                     false
@@ -211,7 +231,7 @@ impl Editor {
             }
             Key::Char('r') => {
                 if key.modifier == KeyPress::CTRL {
-                    self.redo();
+                    self.document.redo();
                     true
                 } else {
                     false
@@ -219,7 +239,7 @@ impl Editor {
             }
             Key::Char('y') => {
                 if key.modifier == KeyPress::CTRL {
-                    self.redo();
+                    self.document.redo();
                     true
                 } else {
                     false
@@ -232,13 +252,13 @@ impl Editor {
             return;
         }
 
-        if self.cursor.place == Place::Ascii {
+        if self.document.cursor.place == Place::Ascii {
             // ascii mode specific
             if let Key::Char(' '..='~') = key.key {
                 if key.modifier == KeyPress::NONE {
                     if let Key::Char(chr) = key.key {
-                        self.replace_byte(self.cursor.offset, chr as u8, 0xff);
-                        self.move_cursor(Location::NextByte);
+                        self.document.modify(chr as u8, 0xff);
+                        self.document.move_cursor(Direction::NextByte);
                     }
                 }
             }
@@ -249,10 +269,10 @@ impl Editor {
                     self.exit();
                 }
                 Key::Char('G') => {
-                    self.move_cursor(Location::FileEnd);
+                    self.document.move_cursor(Direction::FileEnd);
                 }
                 Key::Char('g') => {
-                    self.move_cursor(Location::FileBegin);
+                    self.document.move_cursor(Direction::FileBegin);
                 }
                 Key::Char(':') => {
                     self.goto();
@@ -275,18 +295,18 @@ impl Editor {
                                 '0'..='9' => chr as u8 - b'0',
                                 _ => unreachable!(),
                             };
-                            let (value, mask) = if self.cursor.half == HalfByte::Left {
+                            let (value, mask) = if self.document.cursor.half == HalfByte::Left {
                                 (half << 4, 0xf0)
                             } else {
                                 (half, 0x0f)
                             };
-                            self.replace_byte(self.cursor.offset, value, mask);
-                            self.move_cursor(Location::NextHalf);
+                            self.document.modify(value, mask);
+                            self.document.move_cursor(Direction::NextHalf);
                         }
                     }
                 }
                 Key::Char('u') => {
-                    self.undo();
+                    self.document.undo();
                 }
                 _ => {}
             }
@@ -312,15 +332,14 @@ impl Editor {
     /// Save current file, returns false if operation failed.
     fn save(&mut self) -> bool {
         loop {
-            match self.file.save() {
+            match self.document.save() {
                 Ok(()) => {
-                    self.page.update(&self.file.get_modified());
                     return true;
                 }
                 Err(err) => {
                     if let Some(btn) = MessageBox::new("Error", DialogType::Error)
                         .center("Error writing file")
-                        .center(&self.file.name)
+                        .center(&self.document.path)
                         .center(&format!("{}", err))
                         .button(StdButton::Retry, true)
                         .button(StdButton::Cancel, false)
@@ -340,17 +359,16 @@ impl Editor {
 
     /// Save current file with new name, returns false if operation failed.
     fn save_as(&mut self) -> bool {
-        if let Some(new_name) = SaveAsDialog::show(self.file.name.clone()) {
+        if let Some(new_name) = SaveAsDlg::show(self.document.path.clone()) {
             loop {
-                match self.file.save_as(new_name.clone()) {
+                match self.document.save_as(new_name.clone()) {
                     Ok(()) => {
-                        self.page.update(&self.file.get_modified());
                         return true;
                     }
                     Err(err) => {
                         if let Some(btn) = MessageBox::new("Error", DialogType::Error)
                             .center("Error writing file")
-                            .center(&self.file.name)
+                            .center(&self.document.path)
                             .center(&format!("{}", err))
                             .button(StdButton::Retry, true)
                             .button(StdButton::Cancel, false)
@@ -372,14 +390,14 @@ impl Editor {
 
     /// Goto to specified address.
     fn goto(&mut self) {
-        if let Some(offset) = self.goto.configure(self.cursor.offset) {
-            self.move_cursor(Location::Absolute(offset));
+        if let Some(offset) = self.goto.show(self.document.cursor.offset) {
+            self.document.move_cursor(Direction::Absolute(offset));
         }
     }
 
     /// Find position of the sequence.
     fn find(&mut self) {
-        if self.search.configure() {
+        if self.search.show() {
             self.draw();
             self.find_next(self.search.backward);
         }
@@ -387,21 +405,29 @@ impl Editor {
 
     /// Find next/previous position of the sequence.
     fn find_next(&mut self, backward: bool) {
-        if self.search.get_sequence().is_none() {
+        if let Some(sequence) = self.search.get_sequence() {
+            let mut progress = ProgressDlg::new("Searching...");
+            if let Some(offset) = self.document.find(&sequence, backward, &mut progress) {
+                self.document.move_cursor(Direction::Absolute(offset));
+            } else {
+                MessageBox::new("Search", DialogType::Error)
+                    .center("Sequence not found!")
+                    .button(StdButton::Ok, true)
+                    .show();
+            }
+        } else {
             self.search.backward = backward;
             self.find();
-        } else if let Some(offset) = self.search.find(&mut self.file, self.cursor.offset) {
-            self.move_cursor(Location::Absolute(offset));
         }
         Curses::clear_screen();
     }
 
     /// Exit from editor.
-    fn exit(&mut self) {
-        self.exit = if !self.file.is_modified() {
+    fn exit(&mut self) -> bool {
+        let can_exit = if !self.document.changes.has_changes() {
             true
         } else if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
-            .center(&self.file.name)
+            .center(&self.document.path)
             .center("was modified.")
             .center("Save before exit?")
             .button(StdButton::Yes, false)
@@ -421,97 +447,57 @@ impl Editor {
         } else {
             false
         };
-        if self.exit {
-            let config = Config::get();
+
+        if can_exit {
             let mut history = History::new();
-            history.set_goto(&self.goto.history, config.last_goto);
-            history.set_search(&self.search.history, config.last_search);
-            history.add_filepos(&self.file.name, self.cursor.offset, config.last_file);
+            history.set_goto(&self.goto.history);
+            history.set_search(&self.search.history);
+            history.add_filepos(&self.document.path, self.document.cursor.offset);
             history.save();
         }
-    }
 
-    /// Move cursor.
-    fn move_cursor(&mut self, loc: Location) {
-        let (width, height) = Curses::screen_size();
-
-        let scheme = view::Scheme::new(
-            &Window {
-                x: 0,
-                y: 0,
-                width,
-                height,
-            },
-            &self.view_cfg,
-            self.file.size,
-        );
-        let new_base = self.cursor.move_to(
-            loc,
-            self.page.offset,
-            self.file.size,
-            scheme.rows,
-            scheme.columns,
-        );
-        let data = self
-            .file
-            .get(new_base, scheme.rows * scheme.columns)
-            .unwrap();
-        self.page = PageData::new(new_base, data);
-        self.page.update(&self.file.get_modified());
-    }
-
-    /// Undo last modification.
-    fn undo(&mut self) {
-        if let Some(change) = self.file.undo() {
-            self.move_cursor(Location::Absolute(change.offset));
-        }
-    }
-
-    /// Redo (opposite to Undo).
-    fn redo(&mut self) {
-        if let Some(change) = self.file.redo() {
-            self.move_cursor(Location::Absolute(change.offset));
-        }
-    }
-
-    /// Change data: replace byte at specified offset.
-    fn replace_byte(&mut self, offset: u64, value: u8, mask: u8) {
-        debug_assert!(offset >= self.page.offset);
-        debug_assert!(offset < self.page.offset + self.page.data.len() as u64);
-
-        let index = (offset - self.page.offset) as usize;
-        let old = self.page.data[index];
-        let new = (old & !mask) | (value & mask);
-
-        self.file.set(offset, old, new);
-        self.page.update(&self.file.get_modified());
+        can_exit
     }
 
     /// Draw editor.
     fn draw(&self) {
-        let (width, height) = Curses::screen_size();
-        let wnd = Window {
-            x: 0,
-            y: 0,
-            width,
-            height,
-        };
-        let scheme = view::Scheme::new(&wnd, &self.view_cfg, self.file.size);
-        let view = view::View {
-            scheme: &scheme,
-            config: &self.view_cfg,
-            page: &self.page,
-            file: &self.file,
-            offset: self.cursor.offset,
-        };
+        // draw document
+        self.view.draw(&self.document);
 
-        view.draw();
-        let (x_cursor, y_cursor) = scheme.position(
-            self.page.offset,
-            self.cursor.offset,
-            self.cursor.place == Place::Hex,
-            self.cursor.half == HalfByte::Left,
-        );
-        wnd.show_cursor(x_cursor, y_cursor);
+        // draw key bar (bottom Fn line).
+        let screen = Curses::get_screen();
+        let titles = &[
+            "Help",  // F1
+            "Save",  // F2
+            "",      // F3
+            "",      // F4
+            "Goto",  // F5
+            "",      // F6
+            "Find",  // F7
+            "",      // F8
+            "Setup", // F9
+            "Exit",  // F10
+        ];
+        let mut fn_line = String::new();
+        let width = screen.width / 10;
+        for i in 0..10 {
+            fn_line += &format!(
+                "{:>2}{:<width$}",
+                i + 1,
+                titles[i as usize],
+                width = width - 2
+            );
+        }
+        screen.print(0, screen.height - 1, &fn_line);
+        screen.color(0, screen.height - 1, screen.width, Color::KeyBarTitle);
+        for i in 0..10 {
+            screen.color(i * width, screen.height - 1, 2, Color::KeyBarId);
+        }
+
+        // show cursor
+        let (x_cursor, y_cursor) = self
+            .view
+            .get_position(self.document.page.offset, &self.document.cursor);
+        Curses::show_cursor(x_cursor, y_cursor);
     }
 }

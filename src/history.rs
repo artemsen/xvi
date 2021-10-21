@@ -12,6 +12,12 @@ pub struct History {
 }
 
 impl History {
+    // Max number of stored entries
+    const MAX_GOTO: usize = 10;
+    const MAX_SEARCH: usize = 10;
+    const MAX_FILE: usize = 10;
+
+    // INI sections names
     const GOTO: &'static str = "goto";
     const SEARCH: &'static str = "search";
     const FILE: &'static str = "file";
@@ -50,10 +56,10 @@ impl History {
     }
 
     /// Set list of the last used "goto" addresses.
-    pub fn set_goto(&mut self, offsets: &[u64], max: usize) {
+    pub fn set_goto(&mut self, offsets: &[u64]) {
         let ini_list = offsets
             .iter()
-            .take(max)
+            .take(History::MAX_GOTO)
             .map(|o| format!("{:x}", o))
             .collect();
         self.ini
@@ -86,9 +92,9 @@ impl History {
     }
 
     /// Set list of the last used search sequences.
-    pub fn set_search(&mut self, sequences: &[Vec<u8>], max: usize) {
+    pub fn set_search(&mut self, sequences: &[Vec<u8>]) {
         let mut ini_list = Vec::with_capacity(sequences.len());
-        for seq in sequences.iter().take(max) {
+        for seq in sequences.iter().take(History::MAX_SEARCH) {
             ini_list.push(seq.iter().map(|b| format!("{:02x}", b)).collect());
         }
         self.ini
@@ -111,7 +117,7 @@ impl History {
     }
 
     /// Add last position for the specified file.
-    pub fn add_filepos(&mut self, file: &str, offset: u64, max: usize) {
+    pub fn add_filepos(&mut self, file: &str, offset: u64) {
         let section = &mut self
             .ini
             .sections
@@ -129,7 +135,7 @@ impl History {
 
         // insert new record
         section.insert(0, format!("{}:{:x}", file, offset));
-        section.truncate(max);
+        section.truncate(History::MAX_FILE);
     }
 
     /// Get path to the history file.
@@ -161,13 +167,19 @@ impl History {
 fn test_set_goto() {
     let ini = IniFile::new();
     let mut history = History { ini };
-    history.set_goto(&vec![0x00], 2);
-    assert_eq!(history.get_goto(), vec![0x00]);
-    history.set_goto(&vec![0x1234, 0xabcdef1234567890, 0xabc], 2);
-    assert_eq!(history.get_goto(), vec![0x1234, 0xabcdef1234567890]);
+
+    let mut offsets = Vec::new();
+    for i in 0..History::MAX_GOTO + 2 {
+        offsets.push(i as u64);
+    }
+    history.set_goto(&offsets);
+
+    let offsets = history.get_goto();
+    assert_eq!(offsets.len(), History::MAX_GOTO);
+    assert_eq!(offsets[0], 0);
     assert_eq!(
-        history.ini.sections[History::GOTO],
-        vec!["1234", "abcdef1234567890"]
+        offsets[History::MAX_GOTO - 1],
+        (History::MAX_GOTO - 1) as u64
     );
 }
 
@@ -197,9 +209,9 @@ fn test_get_search() {
 fn test_set_search() {
     let ini = IniFile::new();
     let mut history = History { ini };
-    history.set_search(&vec![vec![0x00]], 2);
+    history.set_search(&vec![vec![0x00]]);
     assert_eq!(history.get_search(), vec![vec![0x00]]);
-    history.set_search(&vec![vec![0x12, 0x34], vec![0xab]], 2);
+    history.set_search(&vec![vec![0x12, 0x34], vec![0xab]]);
     assert_eq!(history.get_search(), vec![vec![0x12, 0x34], vec![0xab]]);
     assert_eq!(history.ini.sections[History::SEARCH], vec!["1234", "ab"]);
 }
@@ -217,23 +229,18 @@ fn test_get_filepos() {
     let history = History { ini };
     assert_eq!(history.get_filepos("/path/to/file"), Some(0x123ab));
     assert_eq!(history.get_filepos("/path/to/fi:le"), Some(0xcdef));
-    assert_eq!(history.get_filepos("/not/exists"), None);
+    assert_eq!(history.get_filepos("/does/not/exist"), None);
 }
 
 #[test]
 fn test_add_filepos() {
     let ini = IniFile::new();
     let mut history = History { ini };
-    history.add_filepos("/path/to/file1", 0x112231, 2);
-    history.add_filepos("/path/to/file2", 0x112232, 2);
-    history.add_filepos("/path/to/file3", 0x112233, 2);
+
+    for i in 0..History::MAX_FILE + 2 {
+        history.add_filepos(&format!("/path/to/file{}", i), i as u64);
+    }
 
     assert_eq!(history.get_filepos("/path/to/file1"), None);
-    assert_eq!(history.get_filepos("/path/to/file2"), Some(0x112232));
-    assert_eq!(history.get_filepos("/path/to/file3"), Some(0x112233));
-
-    assert_eq!(
-        history.ini.sections[History::FILE],
-        vec!["/path/to/file3:112233", "/path/to/file2:112232"]
-    );
+    assert_eq!(history.get_filepos("/path/to/file2"), Some(2));
 }

@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::config::Config;
-
 use ncurses as nc;
 
 /// Wrapper around ncurses.
 pub struct Curses;
 impl Curses {
     /// Initialization.
-    pub fn initialize() {
+    pub fn initialize(colors: &[(Color, u8, u8)]) {
         // setup locale to get UTF-8 support
         nc::setlocale(nc::LcCategory::all, "");
 
@@ -23,7 +21,7 @@ impl Curses {
         // setup colors
         nc::start_color();
         nc::use_default_colors();
-        for &(color, fg, bg) in Config::get().colors.iter() {
+        for &(color, fg, bg) in colors.iter() {
             nc::init_pair(color as i16, fg as i16, bg as i16);
         }
 
@@ -46,16 +44,6 @@ impl Curses {
         nc::refresh();
     }
 
-    /// Print text on the window.
-    pub fn print(x: usize, y: usize, text: &str) {
-        nc::mvaddstr(y as i32, x as i32, text);
-    }
-
-    /// Colorize the specified range in line.
-    pub fn color(x: usize, y: usize, width: usize, color: Color) {
-        nc::mvchgat(y as i32, x as i32, width as i32, 0, color as i16);
-    }
-
     /// Enable color for all further prints.
     pub fn color_on(color: Color) {
         nc::attron(nc::COLOR_PAIR(color as i16));
@@ -72,10 +60,15 @@ impl Curses {
         nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
     }
 
-    /// Get screen size (width, height).
-    pub fn screen_size() -> (usize, usize) {
+    /// Get main screen winndow.
+    pub fn get_screen() -> Window {
         let wnd = nc::stdscr();
-        (nc::getmaxx(wnd) as usize, nc::getmaxy(wnd) as usize)
+        Window {
+            x: 0,
+            y: 0,
+            width: nc::getmaxx(wnd) as usize,
+            height: nc::getmaxy(wnd) as usize,
+        }
     }
 
     /// Read next event.
@@ -340,7 +333,7 @@ impl Window {
     pub fn print(&self, x: usize, y: usize, text: &str) {
         debug_assert!(x <= self.width);
         debug_assert!(y <= self.height);
-        Curses::print(self.x + x, self.y + y, text);
+        nc::mvaddstr((self.y + y) as i32, (self.x + x) as i32, text);
     }
 
     /// Colorize the specified range in line.
@@ -348,13 +341,12 @@ impl Window {
         debug_assert!(x <= self.width);
         debug_assert!(y <= self.height);
         debug_assert!(x + width <= self.width);
-        Curses::color(self.x + x, self.y + y, width, color);
-    }
-
-    /// Show cursor at specified position.
-    pub fn show_cursor(&self, x: usize, y: usize) {
-        debug_assert!(x <= self.width);
-        debug_assert!(y <= self.height);
-        Curses::show_cursor(self.x + x, self.y + y);
+        nc::mvchgat(
+            (self.y + y) as i32,
+            (self.x + x) as i32,
+            width as i32,
+            0,
+            color as i16,
+        );
     }
 }

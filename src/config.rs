@@ -5,28 +5,14 @@ use super::ascii::AsciiTable;
 use super::curses::Color;
 use super::inifile::IniFile;
 use std::env;
-use std::path::Path;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 
 /// Configuration (user settings).
 pub struct Config {
     /// Line width mode (fixed/dynamic).
     pub fixed_width: bool,
-    /// ASCII field charset.
-    pub ascii_charset: Option<&'static AsciiTable>,
-    /// Show/hide status bar.
-    pub show_statusbar: bool,
-    /// Show/hide key bar.
-    pub show_keybar: bool,
-
-    /// Max number of last file positions.
-    pub last_file: usize,
-    /// Max number of the last used "goto" addresses.
-    pub last_goto: usize,
-    /// Max number of the last used search sequences.
-    pub last_search: usize,
-
+    /// ASCII table identifier.
+    pub ascii_table: Option<&'static AsciiTable>,
     /// Color scheme.
     pub colors: Vec<(Color, u8, u8)>,
 }
@@ -39,33 +25,20 @@ impl Default for Config {
         }
         Self {
             fixed_width: false,
-            ascii_charset: AsciiTable::default(),
-            show_statusbar: true,
-            show_keybar: true,
-            last_file: 10,
-            last_goto: 10,
-            last_search: 10,
+            ascii_table: Some(AsciiTable::default()),
             colors,
         }
     }
 }
 
-thread_local! {
-    static CONFIG: RwLock<Arc<Config>> = RwLock::new(Default::default());
-}
-
 impl Config {
     const VIEW: &'static str = "View";
-    const HISTORY: &'static str = "History";
     const COLORS: &'static str = "Colors";
 
-    /// Get current configuration instance.
-    pub fn get() -> Arc<Config> {
-        CONFIG.with(|c| c.read().unwrap().clone())
-    }
-
     /// Load configuration from the default rc file.
-    pub fn load() {
+    pub fn load() -> Self {
+        let mut instance = Config::default();
+
         let dir = match env::var("XDG_CONFIG_HOME") {
             Ok(val) => PathBuf::from(val),
             Err(_) => match env::var("HOME") {
@@ -74,53 +47,33 @@ impl Config {
             },
         };
         let file = dir.join("xvi").join("config");
-        Config::load_file(&file);
-    }
 
-    /// Load configuration from specified rc file.
-    pub fn load_file(file: &Path) {
-        if let Ok(ini) = IniFile::load(file) {
-            let mut cfg = Config::default();
+        if let Ok(ini) = IniFile::load(&file) {
             if let Some(val) = ini.get_boolval(Config::VIEW, "FixedWidth") {
-                cfg.fixed_width = val;
+                instance.fixed_width = val;
             }
             if let Some(val) = ini.get_strval(Config::VIEW, "Ascii") {
                 if val == "none" {
-                    cfg.ascii_charset = None;
-                } else if let Some(table) = AsciiTable::from_id(&val) {
-                    cfg.ascii_charset = Some(table);
+                    instance.ascii_table = None;
+                } else {
+                    instance.ascii_table = AsciiTable::from_id(&val);
                 }
-            }
-            if let Some(val) = ini.get_boolval(Config::VIEW, "Statusbar") {
-                cfg.show_statusbar = val;
-            }
-            if let Some(val) = ini.get_boolval(Config::VIEW, "Keybar") {
-                cfg.show_keybar = val;
-            }
-            if let Some(val) = ini.get_numval(Config::HISTORY, "File") {
-                cfg.last_file = val;
-            }
-            if let Some(val) = ini.get_numval(Config::HISTORY, "Goto") {
-                cfg.last_goto = val;
-            }
-            if let Some(val) = ini.get_numval(Config::HISTORY, "Search") {
-                cfg.last_search = val;
             }
             if let Some(val) = ini.get_strval(Config::COLORS, "Theme") {
                 match val.to_lowercase().as_str() {
                     "light" => {
-                        cfg.colors = Vec::from(Config::LIGHT_THEME);
+                        instance.colors = Vec::from(Config::LIGHT_THEME);
                     }
                     "dark" => { /* already set by default */ }
                     _ => {}
                 };
             }
             if let Some(section) = ini.sections.get(&Config::COLORS.to_lowercase()) {
-                cfg.parse_colors(section);
+                instance.parse_colors(section);
             }
-
-            CONFIG.with(|c| *c.write().unwrap() = Arc::new(cfg));
         }
+
+        instance
     }
 
     /// Parse color parameters.

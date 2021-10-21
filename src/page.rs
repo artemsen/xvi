@@ -1,29 +1,34 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
-/// Page data buffer.
-pub struct PageData {
+/// Page data.
+pub struct Page {
     /// Page start address.
     pub offset: u64,
-    /// Raw data.
+    /// Number of lines per page.
+    pub lines: usize,
+    /// Number of bytes per line.
+    pub columns: usize,
+    /// Raw data to display.
     pub data: Vec<u8>,
-    /// State map (changed, diff, etc).
+    /// Byte states (changed, diff, etc).
     pub state: Vec<u8>,
 }
 
-impl PageData {
+impl Page {
     pub const DEFAULT: u8 = 0;
     pub const CHANGED: u8 = 1;
 
-    /// Create instance.
-    pub fn new(offset: u64, data: Vec<u8>) -> Self {
-        let state = vec![PageData::DEFAULT; data.len()];
+    /// Create new instance.
+    pub fn new() -> Self {
         Self {
-            offset,
-            data,
-            state,
+            offset: u64::MAX,
+            lines: 0,
+            columns: 0,
+            data: Vec::new(),
+            state: Vec::new(),
         }
     }
 
@@ -43,13 +48,14 @@ impl PageData {
     }
 
     /// Update page with changed data.
-    pub fn update(&mut self, changes: &BTreeSet<u64>) {
+    pub fn update(&mut self, changes: &BTreeMap<u64, u8>) {
+        self.state.resize(self.data.len(), Page::DEFAULT);
         for index in 0..self.data.len() {
             let offset = self.offset + index as u64;
-            self.state[index] = if changes.contains(&offset) {
-                PageData::CHANGED
+            self.state[index] = if changes.contains_key(&offset) {
+                Page::CHANGED
             } else {
-                PageData::DEFAULT
+                Page::DEFAULT
             };
         }
     }

@@ -1,19 +1,27 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::curses::Window;
+use super::super::curses::Window;
 use super::dialog::*;
 use super::widget::*;
 
-/// GoTo properties.
-pub struct Goto {
-    /// Goto history.
+/// Dialog for setting "goto" parameters.
+pub struct GotoDlg {
+    /// Address history.
     pub history: Vec<u64>,
 }
 
-impl Goto {
-    /// Show "Go to" dialog, return absolute address to jump.
-    pub fn configure(&mut self, current: u64) -> Option<u64> {
+impl GotoDlg {
+    /// Show "goto" configuration dialog.
+    ///
+    /// # Arguments
+    ///
+    /// * `current` - current offset
+    ///
+    /// # Return value
+    ///
+    /// Absolute offset to jump.
+    pub fn show(&mut self, current: u64) -> Option<u64> {
         let width = 44;
         let mut dlg = Dialog::new(width + Dialog::PADDING_X * 2, 9, DialogType::Normal, "Goto");
 

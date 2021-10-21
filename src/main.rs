@@ -2,22 +2,17 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 mod ascii;
+mod changes;
 mod config;
 mod curses;
 mod cursor;
-mod dialog;
+mod document;
 mod editor;
-mod file;
-mod goto;
 mod history;
 mod inifile;
-mod messagebox;
 mod page;
-mod progress;
-mod saveas;
-mod search;
+mod ui;
 mod view;
-mod widget;
 
 use config::Config;
 use curses::Curses;
@@ -69,9 +64,6 @@ fn main() {
         std::process::exit(1);
     }
 
-    // load config
-    Config::load();
-
     // initial cursor position
     let offset = if let Some(opt) = options.get(&'o') {
         let mut text = opt.clone();
@@ -91,19 +83,20 @@ fn main() {
         None
     };
 
-    // install custom panic hook to close curses before print error info
+    // install custom panic hook to close curses before printing error info
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         Curses::close();
         default_panic(info);
     }));
 
-    Curses::initialize();
-
     // set window title
     println!("\x1b]0;XVI: {}\x07", file);
 
-    let mut editor = match Editor::new(&file) {
+    let config = Config::load();
+    Curses::initialize(&config.colors);
+
+    let mut editor = match Editor::new(&file, offset, &config) {
         Ok(editor) => editor,
         Err(err) => {
             Curses::close();
@@ -111,7 +104,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    editor.run(offset);
+    editor.run();
 
     Curses::close();
 }

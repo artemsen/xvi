@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::curses::*;
+use super::super::curses::*;
 use super::widget::{Border, Button, Separator, Widget, WidgetData};
 
 /// Dialog window.
@@ -31,12 +31,12 @@ impl Dialog {
     /// Create new dialog instance.
     pub fn new(width: usize, height: usize, dt: DialogType, title: &str) -> Self {
         // calculate dialogs's window size and position
-        let (scr_width, scr_height) = Curses::screen_size();
+        let screen = Curses::get_screen();
         let dlg_width = width + Dialog::MARGIN_X * 2;
         let dlg_height = height + Dialog::MARGIN_Y * 2;
         let wnd = Window {
-            x: scr_width / 2 - dlg_width / 2,
-            y: (scr_height as f32 / 2.5) as usize - dlg_height / 2,
+            x: screen.width / 2 - dlg_width / 2,
+            y: (screen.height as f32 / 2.5) as usize - dlg_height / 2,
             width: dlg_width,
             height: dlg_height,
         };
@@ -261,10 +261,11 @@ impl Dialog {
         }
 
         // shadow
+        let screen = Curses::get_screen();
         for y in (self.wnd.y + 1)..(self.wnd.y + self.wnd.height) {
-            Curses::color(self.wnd.x + self.wnd.width, y, 2, Color::DialogShadow);
+            screen.color(self.wnd.x + self.wnd.width, y, 2, Color::DialogShadow);
         }
-        Curses::color(
+        screen.color(
             self.wnd.x + 2,
             self.wnd.y + self.wnd.height,
             self.wnd.width,

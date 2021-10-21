@@ -10,18 +10,6 @@
 FixedWidth = 0
 # ASCII field charset (none, 437, 1251, ascii or named)
 Ascii = 437
-# Show/hide status bar
-Statusbar = 1
-# Show/hide key bar
-Keybar = 1
-
-[History]
-# Number of stored recent files with last cursor position
-File = 10
-# Number of stored recent "goto" offsets
-Goto = 10
-# Number of stored recent search sequences
-Search = 10
 
 [Colors]
 # Base color theme (Light or Dark)

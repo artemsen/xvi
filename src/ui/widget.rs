@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::curses::{Color, Key, KeyPress, Window};
+use super::super::curses::{Color, Key, KeyPress, Window};
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Widget interface.
@@ -243,6 +243,7 @@ pub struct Listbox {
 
 impl Listbox {
     /// Create new widget instance.
+    #[allow(dead_code)]
     pub fn new(list: Vec<String>, current: usize) -> Box<Self> {
         debug_assert!(!list.is_empty());
         Box::new(Self { list, current })

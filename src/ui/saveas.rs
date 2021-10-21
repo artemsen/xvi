@@ -4,11 +4,19 @@
 use super::dialog::*;
 use super::widget::*;
 
-/// "Save as" dialog.
-pub struct SaveAsDialog;
+/// Dialog for asking a user for new file name ("Save as").
+pub struct SaveAsDlg;
 
-impl SaveAsDialog {
-    /// Show "Save As" dialog, returns new file path.
+impl SaveAsDlg {
+    /// Show "Save As" dialog.
+    ///
+    /// # Arguments
+    ///
+    /// * `default` - default file name
+    ///
+    /// # Return value
+    ///
+    /// New file name.
     pub fn show(default: String) -> Option<String> {
         let width = 40;
         let mut dlg = Dialog::new(

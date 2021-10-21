@@ -5,13 +5,13 @@
 pub struct AsciiTable {
     pub id: &'static str,
     pub name: &'static str,
-    pub table: &'static [char],
+    pub charset: &'static [char],
 }
 
 impl AsciiTable {
     /// Get default ASCII table.
-    pub fn default() -> Option<&'static Self> {
-        ASCII_TABLES.first()
+    pub fn default() -> &'static Self {
+        ASCII_TABLES.first().unwrap()
     }
 
     /// Get ASCII table by its ID.
@@ -30,7 +30,7 @@ pub const ASCII_TABLES: &[AsciiTable] = &[
         id: "437",
         name: "CP437 (original IBM PC)",
         #[rustfmt::skip]
-        table: &[
+        charset: &[
             ' ', '☺', '☻', '♥', '♦', '♣', '♠', '•', '◘', '○', '◙', '♂', '♀', '♪', '♫', '☼',
             '►', '◄', '↕', '‼', '¶', '§', '▬', '↨', '↑', '↓', '→', '←', '∟', '↔', '▲', '▼',
             ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
@@ -53,7 +53,7 @@ pub const ASCII_TABLES: &[AsciiTable] = &[
         id: "1251",
         name: "Windows-1251 (Cyrillic)",
         #[rustfmt::skip]
-        table: &[
+        charset: &[
             ' ', '☺', '☻', '♥', '♦', '♣', '♠', '•', '◘', '○', '◙', '♂', '♀', '♪', '♫', '☼',
             '►', '◄', '↕', '‼', '¶', '§', '▬', '↨', '↑', '↓', '→', '←', '∟', '↔', '▲', '▼',
             ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
@@ -76,7 +76,7 @@ pub const ASCII_TABLES: &[AsciiTable] = &[
         id: "ascii",
         name: "Printable characters",
         #[rustfmt::skip]
-        table: &[
+        charset: &[
             ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
             ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
             ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
@@ -99,7 +99,7 @@ pub const ASCII_TABLES: &[AsciiTable] = &[
         id: "named",
         name: "Named control chars",
         #[rustfmt::skip]
-        table: &[
+        charset: &[
             '␀', '␁', '␂', '␃', '␄', '␅', '␆', '␇', '␈', '␉', '␊', '␋', '␌', '␍', '␎', '␏',
             '␐', '␑', '␒', '␓', '␔', '␕', '␖', '␗', '␘', '␙', '␚', '␛', '␜', '␝', '␞', '␟',
             ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
