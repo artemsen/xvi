@@ -179,6 +179,7 @@ impl Document {
     /// Undo last change.
     pub fn undo(&mut self) {
         if let Some(change) = self.changes.undo() {
+            self.update_page(self.page.offset);
             self.move_cursor(Direction::Absolute(change.offset));
         }
     }
@@ -186,6 +187,7 @@ impl Document {
     /// Redo (opposite to Undo).
     pub fn redo(&mut self) {
         if let Some(change) = self.changes.redo() {
+            self.update_page(self.page.offset);
             self.move_cursor(Direction::Absolute(change.offset));
         }
     }

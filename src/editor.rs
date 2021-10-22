@@ -38,7 +38,7 @@ impl Editor {
 
         let document = Document::new(path)?;
 
-        let mut view = View::new(document.size);
+        let mut view = View::new();
         view.fixed_width = config.fixed_width;
         view.ascii_table = config.ascii_table;
 
@@ -105,7 +105,7 @@ impl Editor {
         Curses::clear_screen();
         let mut screen = Curses::get_screen();
         screen.height -= 1; // key bar
-        self.view.resize(&screen);
+        self.view.resize(screen, self.document.size);
         self.document
             .resize_page(self.view.lines, self.view.columns);
     }
@@ -487,9 +487,15 @@ impl Editor {
         }
 
         // show cursor
-        let (x_cursor, y_cursor) = self
-            .view
-            .get_position(self.document.page.offset, &self.document.cursor);
-        Curses::show_cursor(x_cursor, y_cursor);
+        if let Some((mut x, y)) = self.view.get_position(
+            self.document.page.offset,
+            self.document.cursor.offset,
+            self.document.cursor.place == Place::Hex,
+        ) {
+            if self.document.cursor.half == HalfByte::Right {
+                x += 1;
+            }
+            Curses::show_cursor(self.view.window.x + x, self.view.window.y + y);
+        }
     }
 }

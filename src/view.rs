@@ -3,9 +3,7 @@
 
 use super::ascii::AsciiTable;
 use super::curses::{Color, Curses, Window};
-use super::cursor::*;
 use super::document::Document;
-use super::page::Page;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Document view.
@@ -14,20 +12,16 @@ pub struct View {
     pub fixed_width: bool,
     /// ASCII characters table (None hides the field).
     pub ascii_table: Option<&'static AsciiTable>,
-    /// File size.
-    pub file_size: u64,
     /// Number of lines per page.
     pub lines: usize,
     /// Number of bytes per line.
     pub columns: usize,
-    /// Window for status bar.
-    pub wnd_statusbar: Window,
-    /// Window for drawing offsets.
-    pub wnd_offset: Window,
-    /// Window for drawing the hex field.
-    pub wnd_hex: Window,
-    /// Window for drawing the ASCII field.
-    pub wnd_ascii: Window,
+    /// Size of the offset field.
+    pub offset_width: usize,
+    /// Size of the hex field.
+    pub hex_width: usize,
+    /// Window for the view.
+    pub window: Window,
 }
 
 impl View {
@@ -39,32 +33,15 @@ impl View {
     const BYTES_IN_WORD: usize = 4; // number of bytes in a single word
 
     /// Create new viewer instance.
-    pub fn new(file_size: u64) -> Self {
+    pub fn new() -> Self {
         Self {
             fixed_width: true,
             ascii_table: None,
-            file_size,
             lines: 0,
             columns: 0,
-            wnd_statusbar: Window {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
-            },
-            wnd_offset: Window {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
-            },
-            wnd_hex: Window {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
-            },
-            wnd_ascii: Window {
+            offset_width: 0,
+            hex_width: 0,
+            window: Window {
                 x: 0,
                 y: 0,
                 width: 0,
@@ -74,12 +51,19 @@ impl View {
     }
 
     /// Recalculate the view scheme.
-    pub fn resize(&mut self, parent: &Window) {
-        // define size of offset field
-        let mut offset_width: usize = 4; // minimum offset as for u16
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - parent window
+    /// * `file_size` - file size
+    pub fn resize(&mut self, parent: Window, file_size: u64) {
+        self.window = parent;
+
+        // define size of the offset field
+        self.offset_width = 4; // minimum 4 digits (u16)
         for i in (2..8).rev() {
-            if u64::max_value() << (i * 8) & self.file_size != 0 {
-                offset_width = (i + 1) * 2;
+            if u64::max_value() << (i * 8) & file_size != 0 {
+                self.offset_width = (i + 1) * 2;
                 break;
             }
         }
@@ -101,7 +85,7 @@ impl View {
             let word_width = hex_width + ascii_width;
 
             // available space
-            let mut free_space = parent.width - offset_width - View::FIELD_MARGIN;
+            let mut free_space = self.window.width - self.offset_width - View::FIELD_MARGIN;
             if self.ascii_table.is_some() {
                 free_space -= View::FIELD_MARGIN - View::WORD_MARGIN;
             } else {
@@ -112,63 +96,45 @@ impl View {
             free_space / word_width
         };
 
-        self.lines = parent.height - 1 /* status bar */;
+        self.lines = self.window.height - 1 /* status bar */;
         self.columns = words * View::BYTES_IN_WORD;
 
         // calculate hex field size
         let word_width =
             View::BYTES_IN_WORD * View::HEX_LEN + (View::BYTES_IN_WORD - 1) * View::BYTE_MARGIN;
-        let hex_width = words * word_width + (words - 1) * View::WORD_MARGIN;
+        self.hex_width = words * word_width + (words - 1) * View::WORD_MARGIN;
 
         // increase the offset length if possible
-        if offset_width < 8 {
-            let mut free_space = parent.width - offset_width - View::FIELD_MARGIN - hex_width;
+        if self.offset_width < 8 {
+            let mut free_space =
+                self.window.width - self.offset_width - View::FIELD_MARGIN - self.hex_width;
             if self.ascii_table.is_some() {
                 free_space -= View::FIELD_MARGIN + self.columns;
             }
-            offset_width += free_space.min(8 - offset_width);
+            self.offset_width += free_space.min(8 - self.offset_width);
         }
-
-        // calculate subwindows size and position
-        self.wnd_statusbar.x = parent.x;
-        self.wnd_statusbar.y = parent.y;
-        self.wnd_statusbar.width = parent.width;
-        self.wnd_statusbar.height = 1;
-        self.wnd_offset.x = parent.x;
-        self.wnd_offset.y = self.wnd_statusbar.y + self.wnd_statusbar.height;
-        self.wnd_offset.width = offset_width;
-        self.wnd_offset.height = self.lines;
-        self.wnd_hex.x = self.wnd_offset.x + self.wnd_offset.width + View::FIELD_MARGIN;
-        self.wnd_hex.y = self.wnd_statusbar.y + self.wnd_statusbar.height;
-        self.wnd_hex.width = hex_width;
-        self.wnd_hex.height = self.lines;
-        self.wnd_ascii.x = self.wnd_hex.x + self.wnd_hex.width + View::FIELD_MARGIN;
-        self.wnd_ascii.y = self.wnd_statusbar.y + self.wnd_statusbar.height;
-        self.wnd_ascii.width = self.columns;
-        self.wnd_ascii.height = self.lines;
     }
 
-    /// Render the document.
+    /// Draw the document.
+    ///
+    /// # Arguments
+    ///
+    /// * `doc` - document to render
     pub fn draw(&self, doc: &Document) {
         self.draw_statusbar(doc);
-
-        // calculate cursor position (indexes within the page data)
-        let cursor_x = doc.cursor.offset as usize % self.columns;
-        let cursor_y = (doc.cursor.offset - doc.page.offset) as usize / self.columns;
-
-        // draw subwindows
-        self.draw_offsets(&doc.page, cursor_y);
-        self.draw_hex(&doc.page, cursor_x, cursor_y);
-        if self.ascii_table.is_some() {
-            self.draw_ascii(&doc.page, cursor_x, cursor_y);
-        }
+        self.draw_text(doc);
+        self.colorize(doc);
     }
 
-    /// Draw status bar.
+    /// Print the status bar.
+    ///
+    /// # Arguments
+    ///
+    /// * `doc` - document to render
     fn draw_statusbar(&self, doc: &Document) {
         // right part: charset, position, etc
         let mut stat = String::new();
-        let (value, _) = doc.page.get(doc.cursor.offset).unwrap();
+        let value = doc.page.get_data(doc.cursor.offset).unwrap();
         let percent = (doc.cursor.offset * 100 / if doc.size > 1 { doc.size - 1 } else { 1 }) as u8;
         if let Some(table) = self.ascii_table {
             stat = format!(" │ {}", table.id);
@@ -181,7 +147,7 @@ impl View {
         );
 
         let right_len = stat.graphemes(true).count();
-        let left_len = self.wnd_statusbar.width - right_len;
+        let left_len = self.window.width - right_len;
 
         // left part: path to the file and modifcation status
         let mut path = doc.path.clone();
@@ -202,126 +168,191 @@ impl View {
 
         // draw status bar
         let statusbar = format!("{:<width$}{}", path, stat, width = left_len);
-        self.wnd_statusbar.print(0, 0, &statusbar);
-        self.wnd_statusbar
-            .color(0, 0, self.wnd_statusbar.width, Color::StatusBar);
+        self.window.print(0, 0, &statusbar);
+        self.window.color(0, 0, self.window.width, Color::StatusBar);
     }
 
-    /// Print the offsets field.
-    fn draw_offsets(&self, page: &Page, cursor_y: usize) {
-        Curses::color_on(Color::OffsetNormal);
-        for y in 0..self.wnd_offset.height {
-            let offset = page.offset + (y * self.columns) as u64;
-            if offset > self.file_size {
+    /// Print the text representation of the current page.
+    ///
+    /// # Arguments
+    ///
+    /// * `doc` - document to render
+    fn draw_text(&self, doc: &Document) {
+        Curses::color_on(Color::HexNormal);
+        let mut hex = String::with_capacity(self.columns * 3 + self.columns / View::BYTES_IN_WORD);
+        let mut ascii = String::with_capacity(self.columns);
+
+        for y in 0..self.lines {
+            let offset = doc.page.offset + (y * self.columns) as u64;
+            let line = if offset >= doc.size {
+                // fill with spaces to erase previous text
+                (0..self.window.width).map(|_| ' ').collect::<String>()
+            } else {
+                // fill hex and ascii
+                hex.clear();
+                ascii.clear();
+                for x in 0..self.columns {
+                    if !hex.is_empty() {
+                        hex.push(' '); // byte delimiter
+                        if x % View::BYTES_IN_WORD == 0 {
+                            hex.push(' '); // word delimiter
+                        }
+                    }
+                    if let Some(&byte) = doc.page.get_data(offset + x as u64) {
+                        hex.push_str(&format!("{:02x}", byte));
+                        if let Some(table) = self.ascii_table {
+                            ascii.push(table.charset[byte as usize]);
+                        }
+                    } else {
+                        hex.push_str("  ");
+                        if self.ascii_table.is_some() {
+                            ascii.push(' ');
+                        }
+                    }
+                }
+                // compose the final string
+                let mut line = format!(
+                    "{:0ow$x}{:fm$}{}",
+                    offset,
+                    "",
+                    hex,
+                    ow = self.offset_width,
+                    fm = View::FIELD_MARGIN
+                );
+                if self.ascii_table.is_some() {
+                    line.push_str(&format!("{:fm$}{}", "", ascii, fm = View::FIELD_MARGIN));
+                }
+                line
+            };
+
+            self.window.print(0, y + 1 /*status bar*/, &line);
+        }
+    }
+
+    /// Colorize the view.
+    ///
+    /// # Arguments
+    ///
+    /// * `doc` - document to render
+    fn colorize(&self, doc: &Document) {
+        // calculate cursor position (indexes within the page data)
+        let cursor_x = doc.cursor.offset as usize % self.columns;
+        let cursor_y = (doc.cursor.offset - doc.page.offset) as usize / self.columns;
+
+        for y in 0..self.lines {
+            if doc.page.offset + (y * self.columns) as u64 >= doc.size {
                 break;
             }
-            self.wnd_offset
-                .print(0, y, &format!("{:0w$x}", offset, w = self.wnd_offset.width));
+            let display_y = y + 1 /* status bar */;
+
+            // colorize offset
+            self.window.color(
+                0,
+                display_y,
+                self.offset_width,
+                if y == cursor_y {
+                    Color::OffsetHi
+                } else {
+                    Color::OffsetNormal
+                },
+            );
+
+            // highlight the current line in hex
             if y == cursor_y {
-                self.wnd_offset
-                    .color(0, y, self.wnd_offset.width, Color::OffsetHi);
+                self.window.color(
+                    self.offset_width + View::FIELD_MARGIN,
+                    display_y,
+                    self.hex_width,
+                    Color::HexHi,
+                );
+            }
+
+            // colorize ascii
+            if self.ascii_table.is_some() {
+                self.window.color(
+                    self.offset_width + self.hex_width + View::FIELD_MARGIN * 2,
+                    display_y,
+                    self.columns,
+                    if y == cursor_y {
+                        Color::AsciiHi
+                    } else {
+                        Color::AsciiNormal
+                    },
+                );
+            }
+
+            // highlight current column inside hex and ascii fields
+            if y != cursor_y {
+                let hex_x = self.offset_width
+                    + View::FIELD_MARGIN
+                    + cursor_x * (View::BYTES_IN_WORD - 1)
+                    + cursor_x / View::BYTES_IN_WORD;
+                self.window
+                    .color(hex_x, display_y, View::HEX_LEN, Color::HexHi);
+
+                let ascii_x =
+                    self.offset_width + self.hex_width + View::FIELD_MARGIN * 2 + cursor_x;
+                self.window.color(ascii_x, display_y, 1, Color::AsciiHi);
             }
         }
-    }
 
-    /// Print the hex field.
-    fn draw_hex(&self, page: &Page, cursor_x: usize, cursor_y: usize) {
-        for y in 0..self.wnd_hex.height {
-            // line background
-            let color = if y == cursor_y {
-                Color::HexHi
-            } else {
-                Color::HexNormal
-            };
-            self.wnd_hex.color(0, y, self.wnd_hex.width, color);
-
-            for x in 0..self.columns {
-                let offset = page.offset + (y * self.columns + x) as u64;
-                let (text, color) = if let Some((byte, state)) = page.get(offset) {
-                    (
-                        format!("{:02x}", byte),
-                        if state & Page::CHANGED != 0 {
-                            if y == cursor_y || x == cursor_x {
-                                Color::HexModifiedHi
-                            } else {
-                                Color::HexModified
-                            }
-                        } else if y == cursor_y || x == cursor_x {
-                            Color::HexHi
-                        } else {
-                            Color::HexNormal
-                        },
-                    )
+        // highlight changes
+        for &offset in doc
+            .page
+            .changed
+            .range(doc.page.offset..(doc.page.offset + doc.page.data.len() as u64))
+        {
+            let cx = offset as usize % self.columns;
+            let cy = (offset - doc.page.offset) as usize / self.columns;
+            if let Some((x, y)) = self.get_position(doc.page.offset, offset, true) {
+                let color = if cx == cursor_x || cy == cursor_y {
+                    Color::HexModifiedHi
                 } else {
-                    (
-                        String::from("  "),
-                        if y == cursor_y || x == cursor_x {
-                            Color::HexHi
-                        } else {
-                            Color::HexNormal
-                        },
-                    )
+                    Color::HexModified
                 };
-                let pos_x = x * (View::BYTES_IN_WORD - 1) + x / View::BYTES_IN_WORD;
-                self.wnd_hex.print(pos_x, y, &text);
-                self.wnd_hex.color(pos_x, y, View::HEX_LEN, color);
+                self.window.color(x, y, View::HEX_LEN, color);
             }
-        }
-    }
-
-    /// Print the ASCII field.
-    fn draw_ascii(&self, page: &Page, cursor_x: usize, cursor_y: usize) {
-        for y in 0..self.wnd_ascii.height {
-            for x in 0..self.wnd_ascii.width {
-                let offset = page.offset + (y * self.wnd_ascii.width + x) as u64;
-                let (chr, color) = if let Some((byte, state)) = page.get(offset) {
-                    (
-                        self.ascii_table.unwrap().charset[byte as usize],
-                        if state & Page::CHANGED != 0 {
-                            if y == cursor_y || x == cursor_x {
-                                Color::AsciiModifiedHi
-                            } else {
-                                Color::AsciiModified
-                            }
-                        } else if y == cursor_y || x == cursor_x {
-                            Color::AsciiHi
-                        } else {
-                            Color::AsciiNormal
-                        },
-                    )
+            if let Some((x, y)) = self.get_position(doc.page.offset, offset, false) {
+                let color = if cx == cursor_x || cy == cursor_y {
+                    Color::AsciiModifiedHi
                 } else {
-                    (
-                        ' ',
-                        if y == cursor_y || x == cursor_x {
-                            Color::AsciiHi
-                        } else {
-                            Color::AsciiNormal
-                        },
-                    )
+                    Color::AsciiModified
                 };
-                let text = format!("{}", chr);
-                self.wnd_ascii.print(x, y, &text);
-                self.wnd_ascii.color(x, y, 1, color);
+                self.window.color(x, y, 1, color);
             }
         }
     }
 
-    /// Get position of the byte at specified offset, returns absolute display coordinates.
-    pub fn get_position(&self, base: u64, cursor: &Cursor) -> (usize, usize) {
-        let col = cursor.offset as usize % self.columns;
-        let line = (cursor.offset - base) as usize / self.columns;
-        debug_assert!(line < self.lines);
+    /// Get coordinates of specified offset inside the hex or ascii fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `base` - base offset, start address of the current page
+    /// * `offset` - address of the byte
+    /// * `hex` - field type, `true` for hex, `false` for ascii
+    ///
+    /// # Return value
+    ///
+    /// Coordinates of the byte relative to the view window.
+    pub fn get_position(&self, base: u64, offset: u64, hex: bool) -> Option<(usize, usize)> {
+        if offset < base {
+            return None;
+        }
 
-        if cursor.place == Place::Ascii {
-            (self.wnd_ascii.x + col, self.wnd_ascii.y + line)
+        let line = (offset - base) as usize / self.columns;
+        if line >= self.lines {
+            return None;
+        }
+        let y = line + 1 /* status bar */;
+
+        let column = offset as usize % self.columns;
+        let mut x = self.offset_width + View::FIELD_MARGIN;
+        if hex {
+            x += column * (View::BYTES_IN_WORD - 1) + column / View::BYTES_IN_WORD;
         } else {
-            (
-                self.wnd_hex.x
-                    + col * (View::BYTES_IN_WORD - 1)
-                    + col / View::BYTES_IN_WORD
-                    + if cursor.half == HalfByte::Left { 0 } else { 1 },
-                self.wnd_hex.y + line,
-            )
+            x += self.hex_width + View::FIELD_MARGIN + column;
         }
+
+        Some((x, y))
     }
 }
