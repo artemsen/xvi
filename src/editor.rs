@@ -141,17 +141,12 @@ impl Editor {
             }
             Key::F(9) => {
                 if self.setup.show() {
-                    let resize = self.view.fixed_width != self.setup.fixed_width;
-                    if resize {
-                        self.view.fixed_width = self.setup.fixed_width;
-                    }
+                    self.view.fixed_width = self.setup.fixed_width;
                     self.view.ascii_table = self.setup.ascii_table;
                     if self.view.ascii_table.is_none() {
                         self.document.cursor.place = Place::Hex;
                     }
-                    if resize {
-                        self.resize();
-                    }
+                    self.resize();
                 }
                 true
             }
@@ -265,9 +260,6 @@ impl Editor {
         } else {
             // hex mode specific
             match key.key {
-                Key::Char('q') => {
-                    self.exit();
-                }
                 Key::Char('G') => {
                     self.document.move_cursor(Direction::FileEnd);
                 }
