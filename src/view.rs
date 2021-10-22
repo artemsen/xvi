@@ -135,7 +135,12 @@ impl View {
         // right part: charset, position, etc
         let mut stat = String::new();
         let value = doc.page.get_data(doc.cursor.offset).unwrap();
-        let percent = (doc.cursor.offset * 100 / if doc.size > 1 { doc.size - 1 } else { 1 }) as u8;
+        let percent = (doc.cursor.offset * 100
+            / if doc.file.size > 1 {
+                doc.file.size - 1
+            } else {
+                1
+            }) as u8;
         if let Some(table) = self.ascii_table {
             stat = format!(" │ {}", table.id);
         };
@@ -150,7 +155,7 @@ impl View {
         let left_len = self.window.width - right_len;
 
         // left part: path to the file and modifcation status
-        let mut path = doc.path.clone();
+        let mut path = doc.file.path.clone();
         if doc.changes.has_changes() {
             path.push('*');
         }
@@ -184,7 +189,7 @@ impl View {
 
         for y in 0..self.lines {
             let offset = doc.page.offset + (y * self.columns) as u64;
-            let line = if offset >= doc.size {
+            let line = if offset >= doc.file.size {
                 // fill with spaces to erase previous text
                 (0..self.window.width).map(|_| ' ').collect::<String>()
             } else {
@@ -240,7 +245,7 @@ impl View {
         let cursor_y = (doc.cursor.offset - doc.page.offset) as usize / self.columns;
 
         for y in 0..self.lines {
-            if doc.page.offset + (y * self.columns) as u64 >= doc.size {
+            if doc.page.offset + (y * self.columns) as u64 >= doc.file.size {
                 break;
             }
             let display_y = y + 1 /* status bar */;

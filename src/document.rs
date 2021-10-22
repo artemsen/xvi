@@ -3,21 +3,16 @@
 
 use super::changes::ChangeList;
 use super::cursor::*;
+use super::file::File;
 use super::page::Page;
-use std::fs::File;
 use std::fs::OpenOptions;
 use std::io;
-use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::io::{Seek, SeekFrom, Write};
 
 /// Editable document.
 pub struct Document {
     /// Editable file.
     pub file: File,
-    /// Absolute path to the file.
-    pub path: String,
-    /// File size.
-    pub size: u64,
     /// Change list.
     pub changes: ChangeList,
     /// Currently displayed page.
@@ -29,18 +24,8 @@ pub struct Document {
 impl Document {
     /// Create new document instance.
     pub fn new(path: &str) -> io::Result<Self> {
-        let path = Document::abs_path(path);
-        // open file in read only mode
-        let file = OpenOptions::new().read(true).open(&path)?;
-        let meta = file.metadata()?;
-        if meta.len() == 0 {
-            return Err(Error::new(ErrorKind::UnexpectedEof, "File is empty"));
-        }
-        // create document instance
         Ok(Self {
-            file,
-            path,
-            size: meta.len(),
+            file: File::open(path)?,
             changes: ChangeList::new(),
             page: Page::new(),
             cursor: Cursor::new(),
@@ -53,11 +38,14 @@ impl Document {
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
-            .open(self.path.clone())?;
+            .open(self.file.path.clone())?;
         for (&offset, &value) in self.changes.real.iter() {
             file.seek(SeekFrom::Start(offset))?;
             file.write_all(&[value])?;
         }
+
+        // reopen file
+        self.file = File::open(&self.file.path)?;
 
         // reset undo/redo buffer
         self.changes.reset();
@@ -79,14 +67,13 @@ impl Document {
             let data = self.get_data(pos, 512)?;
             new_file.write_all(&data)?;
             pos += data.len() as u64;
-            if pos >= self.size {
+            if pos >= self.file.size {
                 break; //eof
             }
         }
 
-        // update file info
-        self.file = new_file;
-        self.path = Document::abs_path(&path);
+        // reopen file
+        self.file = File::open(&path)?;
 
         // reset undo/redo buffer
         self.changes.reset();
@@ -120,14 +107,14 @@ impl Document {
         loop {
             // update progress info
             handled += step as u64;
-            let percent = 100.0 / (self.size as f32) * handled as f32;
+            let percent = 100.0 / (self.file.size as f32) * handled as f32;
             if !progress.update(percent as u8) {
                 return None; // aborted by user
             }
 
             if !backward {
                 // forward search
-                if offset as u64 >= self.size {
+                if offset as u64 >= self.file.size {
                     offset = 0;
                     round = true;
                 }
@@ -138,10 +125,10 @@ impl Document {
                 }
                 offset -= size;
                 if offset < 0 {
-                    if self.size < size as u64 {
+                    if self.file.size < size as u64 {
                         offset = 0;
                     } else {
-                        offset = self.size as i64 - size;
+                        offset = self.file.size as i64 - size;
                     }
                     round = true;
                 }
@@ -170,7 +157,7 @@ impl Document {
 
     /// Move cursor.
     pub fn move_cursor(&mut self, dir: Direction) {
-        let new_base = self.cursor.move_to(dir, &self.page, self.size);
+        let new_base = self.cursor.move_to(dir, &self.page, self.file.size);
         if new_base != self.page.offset {
             self.update_page(new_base);
         }
@@ -202,28 +189,11 @@ impl Document {
         self.update_page(self.page.offset);
     }
 
-    /// Get absolute path to the file.
-    fn abs_path(file: &str) -> String {
-        if let Ok(path) = PathBuf::from(file).canonicalize() {
-            if let Ok(path) = path.into_os_string().into_string() {
-                path
-            } else {
-                file.to_string()
-            }
-        } else {
-            file.to_string()
-        }
-    }
-
     /// Get file data with applied local changes.
     fn get_data(&mut self, offset: u64, size: usize) -> io::Result<Vec<u8>> {
-        debug_assert!(offset < self.size);
+        debug_assert!(offset < self.file.size);
 
-        // read up to the end of file
-        let size = std::cmp::min((self.size - offset) as usize, size);
-        let mut data = vec![0; size];
-        self.file.seek(SeekFrom::Start(offset))?;
-        self.file.read_exact(&mut data)?;
+        let mut data = self.file.read(offset, size)?;
 
         // apply changes
         let end_offset = offset + data.len() as u64;
@@ -245,7 +215,7 @@ impl Document {
         self.page.lines = lines;
         self.page.columns = columns;
         let dir = Direction::Absolute(self.cursor.offset);
-        let base = self.cursor.move_to(dir, &self.page, self.size);
+        let base = self.cursor.move_to(dir, &self.page, self.file.size);
         self.update_page(base);
     }
 

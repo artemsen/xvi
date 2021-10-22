@@ -64,7 +64,7 @@ impl Editor {
 
         let initial_offset = if let Some(offset) = offset {
             offset
-        } else if let Some(offset) = history.get_filepos(&instance.document.path) {
+        } else if let Some(offset) = history.get_filepos(&instance.document.file.path) {
             offset
         } else {
             0
@@ -105,7 +105,7 @@ impl Editor {
         Curses::clear_screen();
         let mut screen = Curses::get_screen();
         screen.height -= 1; // key bar
-        self.view.resize(screen, self.document.size);
+        self.view.resize(screen, self.document.file.size);
         self.document
             .resize_page(self.view.lines, self.view.columns);
     }
@@ -331,7 +331,7 @@ impl Editor {
                 Err(err) => {
                     if let Some(btn) = MessageBox::new("Error", DialogType::Error)
                         .center("Error writing file")
-                        .center(&self.document.path)
+                        .center(&self.document.file.path)
                         .center(&format!("{}", err))
                         .button(StdButton::Retry, true)
                         .button(StdButton::Cancel, false)
@@ -351,7 +351,7 @@ impl Editor {
 
     /// Save current file with new name, returns false if operation failed.
     fn save_as(&mut self) -> bool {
-        if let Some(new_name) = SaveAsDlg::show(self.document.path.clone()) {
+        if let Some(new_name) = SaveAsDlg::show(self.document.file.path.clone()) {
             loop {
                 match self.document.save_as(new_name.clone()) {
                     Ok(()) => {
@@ -360,7 +360,7 @@ impl Editor {
                     Err(err) => {
                         if let Some(btn) = MessageBox::new("Error", DialogType::Error)
                             .center("Error writing file")
-                            .center(&self.document.path)
+                            .center(&self.document.file.path)
                             .center(&format!("{}", err))
                             .button(StdButton::Retry, true)
                             .button(StdButton::Cancel, false)
@@ -419,7 +419,7 @@ impl Editor {
         let can_exit = if !self.document.changes.has_changes() {
             true
         } else if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
-            .center(&self.document.path)
+            .center(&self.document.file.path)
             .center("was modified.")
             .center("Save before exit?")
             .button(StdButton::Yes, false)
@@ -444,7 +444,7 @@ impl Editor {
             let mut history = History::new();
             history.set_goto(&self.goto.history);
             history.set_search(&self.search.history);
-            history.add_filepos(&self.document.path, self.document.cursor.offset);
+            history.add_filepos(&self.document.file.path, self.document.cursor.offset);
             history.save();
         }
 

@@ -8,6 +8,7 @@ mod curses;
 mod cursor;
 mod document;
 mod editor;
+mod file;
 mod history;
 mod inifile;
 mod page;
