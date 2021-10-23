@@ -5,9 +5,7 @@ use super::changes::ChangeList;
 use super::cursor::*;
 use super::file::File;
 use super::page::Page;
-use std::fs::OpenOptions;
 use std::io;
-use std::io::{Seek, SeekFrom, Write};
 
 /// Editable document.
 pub struct Document {
@@ -34,18 +32,7 @@ impl Document {
 
     /// Write changes to the file.
     pub fn save(&mut self) -> io::Result<()> {
-        // reopen file with the write permission
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(self.file.path.clone())?;
-        for (&offset, &value) in self.changes.real.iter() {
-            file.seek(SeekFrom::Start(offset))?;
-            file.write_all(&[value])?;
-        }
-
-        // reopen file
-        self.file = File::open(&self.file.path)?;
+        self.file.write(&self.changes.real)?;
 
         // reset undo/redo buffer
         self.changes.reset();
@@ -57,23 +44,7 @@ impl Document {
 
     /// Save current file with the new name.
     pub fn save_as(&mut self, path: String) -> io::Result<()> {
-        let mut new_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path.clone())?;
-        let mut pos = 0;
-        loop {
-            let data = self.get_data(pos, 512)?;
-            new_file.write_all(&data)?;
-            pos += data.len() as u64;
-            if pos >= self.file.size {
-                break; //eof
-            }
-        }
-
-        // reopen file
-        self.file = File::open(&path)?;
+        self.file.write_copy(path, &self.changes.real)?;
 
         // reset undo/redo buffer
         self.changes.reset();
