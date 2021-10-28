@@ -3,8 +3,11 @@
 
 use super::changes::ChangeList;
 use super::cursor::*;
+use super::config::Config;
 use super::file::File;
 use super::page::Page;
+use super::curses::Window;
+use super::view::View;
 use std::io;
 
 /// Editable document.
@@ -17,16 +20,22 @@ pub struct Document {
     pub page: Page,
     /// Cursor position within a page.
     pub cursor: Cursor,
+    /// View of the document.
+    pub view: View,
 }
 
 impl Document {
     /// Create new document instance.
-    pub fn new(path: &str) -> io::Result<Self> {
+    pub fn new(path: &str, config: &Config) -> io::Result<Self> {
+        let file = File::open(path)?;
+        let file_size = file.size;
+
         Ok(Self {
-            file: File::open(path)?,
+            file,
             changes: ChangeList::new(),
             page: Page::new(),
             cursor: Cursor::new(),
+            view: View::new(config, file_size),
         })
     }
 
@@ -127,7 +136,7 @@ impl Document {
     }
 
     /// Move cursor.
-    pub fn move_cursor(&mut self, dir: Direction) {
+    pub fn move_cursor(&mut self, dir: &Direction) {
         let new_base = self.cursor.move_to(dir, &self.page, self.file.size);
         if new_base != self.page.offset {
             self.update_page(new_base);
@@ -138,7 +147,7 @@ impl Document {
     pub fn undo(&mut self) {
         if let Some(change) = self.changes.undo() {
             self.update_page(self.page.offset);
-            self.move_cursor(Direction::Absolute(change.offset));
+            self.move_cursor(&Direction::Absolute(change.offset));
         }
     }
 
@@ -146,7 +155,7 @@ impl Document {
     pub fn redo(&mut self) {
         if let Some(change) = self.changes.redo() {
             self.update_page(self.page.offset);
-            self.move_cursor(Direction::Absolute(change.offset));
+            self.move_cursor(&Direction::Absolute(change.offset));
         }
     }
 
@@ -176,17 +185,17 @@ impl Document {
         Ok(data)
     }
 
-    /// Resize page.
+    /// Resize view and page.
     ///
     /// # Arguments
     ///
-    /// * `lines` - number of lines per page
-    /// * `columns` - number of bytes per line
-    pub fn resize_page(&mut self, lines: usize, columns: usize) {
-        self.page.lines = lines;
-        self.page.columns = columns;
+    /// * `parent` - parent window
+    pub fn resize(&mut self, parent: Window) {
+        self.view.resize(parent);
+        self.page.lines = self.view.lines;
+        self.page.columns = self.view.columns;
         let dir = Direction::Absolute(self.cursor.offset);
-        let base = self.cursor.move_to(dir, &self.page, self.file.size);
+        let base = self.cursor.move_to(&dir, &self.page, self.file.size);
         self.update_page(base);
     }
 

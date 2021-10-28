@@ -25,13 +25,9 @@ impl Cursor {
         }
     }
 
-    /// Switch current place (ascii/hex).
-    pub fn switch_place(&mut self) {
-        self.place = if self.place == Place::Hex {
-            Place::Ascii
-        } else {
-            Place::Hex
-        };
+    /// Set current place (ascii/hex).
+    pub fn set_place(&mut self, place: Place) {
+        self.place = place;
         self.half = HalfByte::Left;
     }
 
@@ -46,7 +42,7 @@ impl Cursor {
     /// # Return value
     ///
     /// New page offset.
-    pub fn move_to(&mut self, dir: Direction, page: &Page, max: u64) -> u64 {
+    pub fn move_to(&mut self, dir: &Direction, page: &Page, max: u64) -> u64 {
         let page_size = (page.lines * page.columns) as u64;
         let mut new_base = page.offset;
 
@@ -210,7 +206,7 @@ impl Cursor {
                 }
             }
             Direction::Absolute(offset) => {
-                self.offset = if offset < max { offset } else { max - 1 };
+                self.offset = if offset < &max { *offset } else { max - 1 };
                 self.half = HalfByte::Left;
                 if self.offset < new_base || self.offset > new_base + page_size {
                     if self.offset > page_size / 3 {
@@ -247,7 +243,7 @@ pub enum HalfByte {
 }
 
 /// Edit mode (hex/ascii).
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum Place {
     Hex,
     Ascii,

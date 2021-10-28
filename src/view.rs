@@ -2,6 +2,7 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::ascii::AsciiTable;
+use super::config::Config;
 use super::curses::{Color, Curses, Window};
 use super::document::Document;
 use unicode_segmentation::UnicodeSegmentation;
@@ -16,6 +17,8 @@ pub struct View {
     pub lines: usize,
     /// Number of bytes per line.
     pub columns: usize,
+    /// Max offset (file size).
+    pub max_offset: u64,
     /// Size of the offset field.
     pub offset_width: usize,
     /// Size of the hex field.
@@ -33,13 +36,14 @@ impl View {
     const BYTES_IN_WORD: usize = 4; // number of bytes in a single word
 
     /// Create new viewer instance.
-    pub fn new() -> Self {
+    pub fn new(config: &Config, file_size: u64) -> Self {
         Self {
-            fixed_width: true,
-            ascii_table: None,
+            fixed_width: config.fixed_width,
+            ascii_table: config.ascii_table,
             lines: 0,
             columns: 0,
             offset_width: 0,
+            max_offset: file_size,
             hex_width: 0,
             window: Window {
                 x: 0,
@@ -55,14 +59,13 @@ impl View {
     /// # Arguments
     ///
     /// * `parent` - parent window
-    /// * `file_size` - file size
-    pub fn resize(&mut self, parent: Window, file_size: u64) {
+    pub fn resize(&mut self, parent: Window) {
         self.window = parent;
 
         // define size of the offset field
         self.offset_width = 4; // minimum 4 digits (u16)
         for i in (2..8).rev() {
-            if u64::max_value() << (i * 8) & file_size != 0 {
+            if u64::max_value() << (i * 8) & self.max_offset != 0 {
                 self.offset_width = (i + 1) * 2;
                 break;
             }

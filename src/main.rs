@@ -50,16 +50,16 @@ fn main() {
     }));
 
     // set window title
-    println!("\x1b]0;XVI: {}\x07", args.files[0]);
+    println!("\x1b]0;XVI: {}\x07", args.files.join(", "));
 
     let config = Config::load();
     Curses::initialize(&config.colors);
 
-    let mut editor = match Editor::new(&args.files[0], args.offset, &config) {
+    let mut editor = match Editor::new(&args.files, args.offset, &config) {
         Ok(editor) => editor,
         Err(err) => {
             Curses::close();
-            eprintln!("{}: {}", err, &args.files[0]);
+            eprintln!("{}: {}", err, args.files.join(", "));
             std::process::exit(1);
         }
     };

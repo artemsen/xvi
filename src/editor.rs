@@ -14,14 +14,14 @@ use super::ui::saveas::*;
 use super::ui::search::*;
 use super::ui::setup::SetupDlg;
 use super::ui::widget::*;
-use super::view::View;
 
 /// Editor: implements business logic of a hex editor.
+#[allow(dead_code)]
 pub struct Editor {
-    /// Editable document.
-    document: Document,
-    /// View of the document.
-    view: View,
+    /// Editable documents.
+    documents: Vec<Document>,
+    /// Index of currently selected document.
+    current: usize,
 
     /// "Goto" configuration dialog.
     goto: GotoDlg,
@@ -33,15 +33,37 @@ pub struct Editor {
 
 impl Editor {
     /// Create new editor instance.
-    pub fn new(path: &str, offset: Option<u64>, config: &Config) -> Result<Self, std::io::Error> {
+    pub fn new(
+        files: &[String],
+        offset: Option<u64>,
+        config: &Config,
+    ) -> Result<Self, std::io::Error> {
         let history = History::new();
 
-        let document = Document::new(path)?;
+        // create document instances
+        let mut documents = Vec::with_capacity(files.len());
+        for file in files {
+            documents.push(Document::new(file, config)?);
+        }
 
-        let mut view = View::new();
-        view.fixed_width = config.fixed_width;
-        view.ascii_table = config.ascii_table;
+        // define initial offset
+        let mut initial_offset = 0;
+        if let Some(offset) = offset {
+            initial_offset = offset;
+        } else {
+            for doc in documents.iter() {
+                if let Some(offset) = history.get_filepos(&doc.file.path) {
+                    initial_offset = offset;
+                    break;
+                }
+            }
+        }
+        // apply initial offset
+        documents
+            .iter_mut()
+            .for_each(|doc| doc.cursor.offset = initial_offset);
 
+        // initialize dialog windows
         let goto = GotoDlg {
             history: history.get_goto(),
         };
@@ -54,22 +76,14 @@ impl Editor {
             ascii_table: config.ascii_table,
         };
 
+        // create instance
         let mut instance = Self {
-            document,
-            view,
+            documents,
+            current: 0,
             goto,
             search,
             setup,
         };
-
-        let initial_offset = if let Some(offset) = offset {
-            offset
-        } else if let Some(offset) = history.get_filepos(&instance.document.file.path) {
-            offset
-        } else {
-            0
-        };
-        instance.document.cursor.offset = initial_offset;
         instance.resize();
 
         Ok(instance)
@@ -100,16 +114,6 @@ impl Editor {
         }
     }
 
-    /// Screen resize handler.
-    fn resize(&mut self) {
-        Curses::clear_screen();
-        let mut screen = Curses::get_screen();
-        screen.height -= 1; // key bar
-        self.view.resize(screen, self.document.file.size);
-        self.document
-            .resize_page(self.view.lines, self.view.columns);
-    }
-
     /// External event handler, called on key press.
     fn handle_key(&mut self, key: KeyPress) {
         let handled = match key.key {
@@ -119,9 +123,9 @@ impl Editor {
             }
             Key::F(2) => {
                 if key.modifier == KeyPress::NONE {
-                    self.save();
+                    Editor::save(&mut self.documents[self.current]);
                 } else if key.modifier == KeyPress::SHIFT {
-                    self.save_as();
+                    Editor::save_as(&mut self.documents[self.current]);
                 }
                 true
             }
@@ -141,84 +145,145 @@ impl Editor {
             }
             Key::F(9) => {
                 if self.setup.show() {
-                    self.view.fixed_width = self.setup.fixed_width;
-                    self.view.ascii_table = self.setup.ascii_table;
-                    if self.view.ascii_table.is_none() {
-                        self.document.cursor.place = Place::Hex;
+                    for doc in self.documents.iter_mut() {
+                        doc.view.fixed_width = self.setup.fixed_width;
+                        doc.view.ascii_table = self.setup.ascii_table;
+                        if doc.view.ascii_table.is_none() {
+                            doc.cursor.set_place(Place::Hex);
+                        }
                     }
                     self.resize();
                 }
                 true
             }
             Key::Tab => {
-                if self.view.ascii_table.is_some() {
-                    self.document.cursor.switch_place();
+                if key.modifier == KeyPress::NONE {
+                    if self.documents[self.current].cursor.place == Place::Hex
+                        && self.documents[self.current].view.ascii_table.is_some()
+                    {
+                        self.documents
+                            .iter_mut()
+                            .for_each(|doc| doc.cursor.set_place(Place::Ascii));
+                    } else {
+                        if self.documents[self.current].cursor.place == Place::Ascii {
+                            self.current += 1;
+                            if self.current == self.documents.len() {
+                                self.current = 0;
+                            }
+                        }
+                        self.documents
+                            .iter_mut()
+                            .for_each(|doc| doc.cursor.set_place(Place::Hex));
+                    }
+                } else if key.modifier == KeyPress::SHIFT {
+                    if self.documents[self.current].cursor.place == Place::Ascii {
+                        self.documents
+                            .iter_mut()
+                            .for_each(|doc| doc.cursor.set_place(Place::Hex));
+                    } else {
+                        if self.documents[self.current].cursor.place == Place::Hex {
+                            if self.current > 0 {
+                                self.current -= 1;
+                            } else {
+                                self.current = self.documents.len() - 1;
+                            }
+                        }
+                        let place = if self.documents[self.current].view.ascii_table.is_some() {
+                            Place::Ascii
+                        } else {
+                            Place::Hex
+                        };
+                        self.documents
+                            .iter_mut()
+                            .for_each(|doc| doc.cursor.set_place(place.clone()));
+                    }
                 }
                 true
             }
             Key::Left => {
                 if key.modifier == KeyPress::NONE {
-                    self.document.move_cursor(Direction::PrevByte);
+                    self.move_cursor(&Direction::PrevByte);
                 } else if key.modifier == KeyPress::SHIFT {
-                    self.document.move_cursor(Direction::PrevHalf);
-                } else if key.modifier == KeyPress::CTRL {
-                    self.document.move_cursor(Direction::PrevWord);
+                    self.move_cursor(&Direction::PrevHalf);
+                } else if key.modifier == KeyPress::ALT {
+                    self.move_cursor(&Direction::PrevWord);
+                } else if key.modifier == KeyPress::CTRL
+                    && self.documents[self.current].cursor.place == Place::Ascii
+                {
+                    self.documents
+                        .iter_mut()
+                        .for_each(|doc| doc.cursor.set_place(Place::Hex));
                 }
                 true
             }
             Key::Right => {
                 if key.modifier == KeyPress::NONE {
-                    self.document.move_cursor(Direction::NextByte);
+                    self.move_cursor(&Direction::NextByte);
                 } else if key.modifier == KeyPress::SHIFT {
-                    self.document.move_cursor(Direction::NextHalf);
-                } else if key.modifier == KeyPress::CTRL {
-                    self.document.move_cursor(Direction::NextWord);
+                    self.move_cursor(&Direction::NextHalf);
+                } else if key.modifier == KeyPress::ALT {
+                    self.move_cursor(&Direction::NextWord);
+                } else if key.modifier == KeyPress::CTRL
+                    && self.documents[self.current].view.ascii_table.is_some()
+                    && self.documents[self.current].cursor.place == Place::Hex
+                {
+                    self.documents
+                        .iter_mut()
+                        .for_each(|doc| doc.cursor.set_place(Place::Ascii));
                 }
                 true
             }
             Key::Up => {
                 if key.modifier == KeyPress::NONE {
-                    self.document.move_cursor(Direction::LineUp);
+                    self.move_cursor(&Direction::LineUp);
+                } else if key.modifier == KeyPress::ALT {
+                    self.move_cursor(&Direction::ScrollUp);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.document.move_cursor(Direction::ScrollUp);
+                    if self.current > 0 {
+                        self.current -= 1;
+                    }
                 }
                 true
             }
             Key::Down => {
                 if key.modifier == KeyPress::NONE {
-                    self.document.move_cursor(Direction::LineDown);
+                    self.move_cursor(&Direction::LineDown);
+                } else if key.modifier == KeyPress::ALT {
+                    self.move_cursor(&Direction::ScrollDown);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.document.move_cursor(Direction::ScrollDown);
+                    if self.current + 1 < self.documents.len() {
+                        self.current += 1;
+                    }
                 }
                 true
             }
             Key::Home => {
                 if key.modifier == KeyPress::NONE {
-                    self.document.move_cursor(Direction::LineBegin);
+                    self.move_cursor(&Direction::LineBegin);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.document.move_cursor(Direction::FileBegin);
+                    self.move_cursor(&Direction::FileBegin);
                 }
                 true
             }
             Key::End => {
                 if key.modifier == KeyPress::NONE {
-                    self.document.move_cursor(Direction::LineEnd);
+                    self.move_cursor(&Direction::LineEnd);
                 } else if key.modifier == KeyPress::CTRL {
-                    self.document.move_cursor(Direction::FileEnd);
+                    self.move_cursor(&Direction::FileEnd);
                 }
                 true
             }
             Key::PageUp => {
-                self.document.move_cursor(Direction::PageUp);
+                self.move_cursor(&Direction::PageUp);
                 true
             }
             Key::PageDown => {
-                self.document.move_cursor(Direction::PageDown);
+                self.move_cursor(&Direction::PageDown);
                 true
             }
             Key::Char('z') => {
                 if key.modifier == KeyPress::CTRL {
-                    self.document.undo();
+                    self.documents[self.current].undo();
                     true
                 } else {
                     false
@@ -226,7 +291,7 @@ impl Editor {
             }
             Key::Char('r') => {
                 if key.modifier == KeyPress::CTRL {
-                    self.document.redo();
+                    self.documents[self.current].redo();
                     true
                 } else {
                     false
@@ -234,7 +299,7 @@ impl Editor {
             }
             Key::Char('y') => {
                 if key.modifier == KeyPress::CTRL {
-                    self.document.redo();
+                    self.documents[self.current].redo();
                     true
                 } else {
                     false
@@ -247,13 +312,13 @@ impl Editor {
             return;
         }
 
-        if self.document.cursor.place == Place::Ascii {
+        if self.documents[self.current].cursor.place == Place::Ascii {
             // ascii mode specific
             if let Key::Char(' '..='~') = key.key {
                 if key.modifier == KeyPress::NONE {
                     if let Key::Char(chr) = key.key {
-                        self.document.modify(chr as u8, 0xff);
-                        self.document.move_cursor(Direction::NextByte);
+                        self.documents[self.current].modify(chr as u8, 0xff);
+                        self.move_cursor(&Direction::NextByte);
                     }
                 }
             }
@@ -261,10 +326,10 @@ impl Editor {
             // hex mode specific
             match key.key {
                 Key::Char('G') => {
-                    self.document.move_cursor(Direction::FileEnd);
+                    self.move_cursor(&Direction::FileEnd);
                 }
                 Key::Char('g') => {
-                    self.document.move_cursor(Direction::FileBegin);
+                    self.move_cursor(&Direction::FileBegin);
                 }
                 Key::Char(':') => {
                     self.goto();
@@ -287,20 +352,39 @@ impl Editor {
                                 '0'..='9' => chr as u8 - b'0',
                                 _ => unreachable!(),
                             };
-                            let (value, mask) = if self.document.cursor.half == HalfByte::Left {
-                                (half << 4, 0xf0)
-                            } else {
-                                (half, 0x0f)
-                            };
-                            self.document.modify(value, mask);
-                            self.document.move_cursor(Direction::NextHalf);
+                            let (value, mask) =
+                                if self.documents[self.current].cursor.half == HalfByte::Left {
+                                    (half << 4, 0xf0)
+                                } else {
+                                    (half, 0x0f)
+                                };
+                            self.documents[self.current].modify(value, mask);
+                            self.move_cursor(&Direction::NextHalf);
                         }
                     }
                 }
                 Key::Char('u') => {
-                    self.document.undo();
+                    self.documents[self.current].undo();
                 }
                 _ => {}
+            }
+        }
+    }
+
+    /// Move cursor.
+    ///
+    /// # Arguments
+    ///
+    /// * `dir` - move direction
+    fn move_cursor(&mut self, dir: &Direction) {
+        self.documents[self.current].move_cursor(&dir);
+        let offset = self.documents[self.current].cursor.offset;
+        for (index, doc) in self.documents.iter_mut().enumerate() {
+            if self.current != index {
+                doc.move_cursor(dir);
+                if doc.cursor.offset != offset {
+                    doc.move_cursor(&Direction::Absolute(offset));
+                }
             }
         }
     }
@@ -322,16 +406,16 @@ impl Editor {
     }
 
     /// Save current file, returns false if operation failed.
-    fn save(&mut self) -> bool {
+    fn save(doc: &mut Document) -> bool {
         loop {
-            match self.document.save() {
+            match doc.save() {
                 Ok(()) => {
                     return true;
                 }
                 Err(err) => {
                     if let Some(btn) = MessageBox::new("Error", DialogType::Error)
                         .center("Error writing file")
-                        .center(&self.document.file.path)
+                        .center(&doc.file.path)
                         .center(&format!("{}", err))
                         .button(StdButton::Retry, true)
                         .button(StdButton::Cancel, false)
@@ -340,7 +424,6 @@ impl Editor {
                         if btn != StdButton::Retry {
                             return false;
                         }
-                        self.draw();
                     } else {
                         return false;
                     }
@@ -350,17 +433,17 @@ impl Editor {
     }
 
     /// Save current file with new name, returns false if operation failed.
-    fn save_as(&mut self) -> bool {
-        if let Some(new_name) = SaveAsDlg::show(self.document.file.path.clone()) {
+    fn save_as(doc: &mut Document) -> bool {
+        if let Some(new_name) = SaveAsDlg::show(doc.file.path.clone()) {
             loop {
-                match self.document.save_as(new_name.clone()) {
+                match doc.save_as(new_name.clone()) {
                     Ok(()) => {
                         return true;
                     }
                     Err(err) => {
                         if let Some(btn) = MessageBox::new("Error", DialogType::Error)
                             .center("Error writing file")
-                            .center(&self.document.file.path)
+                            .center(&doc.file.path)
                             .center(&format!("{}", err))
                             .button(StdButton::Retry, true)
                             .button(StdButton::Cancel, false)
@@ -369,7 +452,6 @@ impl Editor {
                             if btn != StdButton::Retry {
                                 return false;
                             }
-                            self.draw();
                         } else {
                             return false;
                         }
@@ -382,8 +464,8 @@ impl Editor {
 
     /// Goto to specified address.
     fn goto(&mut self) {
-        if let Some(offset) = self.goto.show(self.document.cursor.offset) {
-            self.document.move_cursor(Direction::Absolute(offset));
+        if let Some(offset) = self.goto.show(self.documents[self.current].cursor.offset) {
+            self.move_cursor(&Direction::Absolute(offset));
         }
     }
 
@@ -399,8 +481,10 @@ impl Editor {
     fn find_next(&mut self, backward: bool) {
         if let Some(sequence) = self.search.get_sequence() {
             let mut progress = ProgressDlg::new("Searching...");
-            if let Some(offset) = self.document.find(&sequence, backward, &mut progress) {
-                self.document.move_cursor(Direction::Absolute(offset));
+            if let Some(offset) =
+                self.documents[self.current].find(&sequence, backward, &mut progress)
+            {
+                self.move_cursor(&Direction::Absolute(offset));
             } else {
                 MessageBox::new("Search", DialogType::Error)
                     .center("Sequence not found!")
@@ -416,45 +500,51 @@ impl Editor {
 
     /// Exit from editor.
     fn exit(&mut self) -> bool {
-        let can_exit = if !self.document.changes.has_changes() {
-            true
-        } else if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
-            .center(&self.document.file.path)
-            .center("was modified.")
-            .center("Save before exit?")
-            .button(StdButton::Yes, false)
-            .button(StdButton::No, false)
-            .button(StdButton::Cancel, true)
-            .show()
-        {
-            match btn {
-                StdButton::Yes => {
-                    self.draw();
-                    self.save()
-                }
-                StdButton::No => true,
-                StdButton::Cancel => false,
-                _ => unreachable!(),
+        for doc in self.documents.iter_mut() {
+            if !doc.changes.has_changes() {
+                continue;
             }
-        } else {
-            false
-        };
-
-        if can_exit {
-            let mut history = History::new();
-            history.set_goto(&self.goto.history);
-            history.set_search(&self.search.history);
-            history.add_filepos(&self.document.file.path, self.document.cursor.offset);
-            history.save();
+            if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
+                .center(&doc.file.path)
+                .center("was modified.")
+                .center("Save before exit?")
+                .button(StdButton::Yes, false)
+                .button(StdButton::No, false)
+                .button(StdButton::Cancel, true)
+                .show()
+            {
+                match btn {
+                    StdButton::Yes => {
+                        if !Editor::save(doc) {
+                            return false;
+                        }
+                    }
+                    StdButton::Cancel => {
+                        return false;
+                    }
+                    _ => {}
+                }
+            } else {
+                return false;
+            }
         }
 
-        can_exit
+        // save history
+        let mut history = History::new();
+        history.set_goto(&self.goto.history);
+        history.set_search(&self.search.history);
+        self.documents
+            .iter()
+            .for_each(|doc| history.add_filepos(&doc.file.path, doc.cursor.offset));
+        history.save();
+
+        true
     }
 
     /// Draw editor.
     fn draw(&self) {
-        // draw document
-        self.view.draw(&self.document);
+        // draw documents
+        self.documents.iter().for_each(|doc| doc.view.draw(doc));
 
         // draw key bar (bottom Fn line).
         let screen = Curses::get_screen();
@@ -487,15 +577,41 @@ impl Editor {
         }
 
         // show cursor
-        if let Some((mut x, y)) = self.view.get_position(
-            self.document.page.offset,
-            self.document.cursor.offset,
-            self.document.cursor.place == Place::Hex,
+        let doc = &self.documents[self.current];
+        if let Some((mut x, y)) = doc.view.get_position(
+            doc.page.offset,
+            doc.cursor.offset,
+            doc.cursor.place == Place::Hex,
         ) {
-            if self.document.cursor.half == HalfByte::Right {
+            if doc.cursor.half == HalfByte::Right {
                 x += 1;
             }
-            Curses::show_cursor(self.view.window.x + x, self.view.window.y + y);
+            Curses::show_cursor(doc.view.window.x + x, doc.view.window.y + y);
+        }
+    }
+
+    /// Screen resize handler.
+    fn resize(&mut self) {
+        Curses::clear_screen();
+        let mut screen = Curses::get_screen();
+        screen.height -= 1; // key bar
+
+        let height = screen.height / self.documents.len();
+        let last_index = self.documents.len() - 1;
+        for (index, doc) in self.documents.iter_mut().enumerate() {
+            let wnd = Window {
+                x: screen.x,
+                y: index * height,
+                width: screen.width,
+                height: if index != last_index {
+                    height
+                } else {
+                    // enlarge last window to fit the screen
+                    screen.height - height * last_index
+                },
+            };
+
+            doc.resize(wnd);
         }
     }
 }
