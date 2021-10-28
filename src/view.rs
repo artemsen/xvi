@@ -145,7 +145,7 @@ impl View {
             stat = format!(" │ {}", table.id);
         };
         stat += &format!(
-            " │ 0x{offset:04x} = 0x{:02x} {value:<3} 0{value:<3o} {value:08b} │ {percent:>3}%",
+            " │ 0x{offset:04x} = 0x{value:02x} {value:<3} 0{value:<3o} {value:08b} │ {percent:>3}%",
             offset = doc.cursor.offset,
             value = value,
             percent = percent
