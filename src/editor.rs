@@ -343,6 +343,18 @@ impl Editor {
                 Key::Char('N') => {
                     self.find_next(!self.search.backward);
                 }
+                Key::Char('h') => {
+                    self.move_cursor(&Direction::PrevByte);
+                }
+                Key::Char('l') => {
+                    self.move_cursor(&Direction::NextByte);
+                }
+                Key::Char('j') => {
+                    self.move_cursor(&Direction::LineUp);
+                }
+                Key::Char('k') => {
+                    self.move_cursor(&Direction::LineDown);
+                }
                 Key::Char('a'..='f') | Key::Char('A'..='F') | Key::Char('0'..='9') => {
                     if key.modifier == KeyPress::NONE {
                         if let Key::Char(chr) = key.key {
@@ -495,7 +507,6 @@ impl Editor {
             self.search.backward = backward;
             self.find();
         }
-        Curses::clear_screen();
     }
 
     /// Exit from editor.
