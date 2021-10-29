@@ -241,7 +241,6 @@ impl Dialog {
                 }
             }
         }
-        Curses::clear_screen();
 
         rc
     }
