@@ -304,6 +304,32 @@ impl View {
             }
         }
 
+        // highlight diff
+        for &offset in doc
+            .page
+            .diff
+            .range(doc.page.offset..(doc.page.offset + doc.page.data.len() as u64))
+        {
+            let cx = offset as usize % self.columns;
+            let cy = (offset - doc.page.offset) as usize / self.columns;
+            if let Some((x, y)) = self.get_position(doc.page.offset, offset, true) {
+                let color = if cx == cursor_x || cy == cursor_y {
+                    Color::HexDiffHi
+                } else {
+                    Color::HexDiff
+                };
+                self.window.color(x, y, View::HEX_LEN, color);
+            }
+            if let Some((x, y)) = self.get_position(doc.page.offset, offset, false) {
+                let color = if cx == cursor_x || cy == cursor_y {
+                    Color::AsciiDiffHi
+                } else {
+                    Color::AsciiDiff
+                };
+                self.window.color(x, y, 1, color);
+            }
+        }
+
         // highlight changes
         for &offset in doc
             .page

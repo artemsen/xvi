@@ -14,6 +14,7 @@ use super::ui::saveas::*;
 use super::ui::search::*;
 use super::ui::setup::SetupDlg;
 use super::ui::widget::*;
+use std::collections::BTreeSet;
 
 /// Editor: implements business logic of a hex editor.
 #[allow(dead_code)]
@@ -46,23 +47,6 @@ impl Editor {
             documents.push(Document::new(file, config)?);
         }
 
-        // define initial offset
-        let mut initial_offset = 0;
-        if let Some(offset) = offset {
-            initial_offset = offset;
-        } else {
-            for doc in documents.iter() {
-                if let Some(offset) = history.get_filepos(&doc.file.path) {
-                    initial_offset = offset;
-                    break;
-                }
-            }
-        }
-        // apply initial offset
-        documents
-            .iter_mut()
-            .for_each(|doc| doc.cursor.offset = initial_offset);
-
         // initialize dialog windows
         let goto = GotoDlg {
             history: history.get_goto(),
@@ -85,6 +69,20 @@ impl Editor {
             setup,
         };
         instance.resize();
+
+        // define and apply initial offset
+        let mut initial_offset = 0;
+        if let Some(offset) = offset {
+            initial_offset = offset;
+        } else {
+            for doc in instance.documents.iter() {
+                if let Some(offset) = history.get_filepos(&doc.file.path) {
+                    initial_offset = offset;
+                    break;
+                }
+            }
+        }
+        instance.move_cursor(&Direction::Absolute(initial_offset));
 
         Ok(instance)
     }
@@ -238,10 +236,8 @@ impl Editor {
                     self.move_cursor(&Direction::LineUp);
                 } else if key.modifier == KeyPress::ALT {
                     self.move_cursor(&Direction::ScrollUp);
-                } else if key.modifier == KeyPress::CTRL {
-                    if self.current > 0 {
-                        self.current -= 1;
-                    }
+                } else if key.modifier == KeyPress::CTRL && self.current > 0 {
+                    self.current -= 1;
                 }
                 true
             }
@@ -250,10 +246,9 @@ impl Editor {
                     self.move_cursor(&Direction::LineDown);
                 } else if key.modifier == KeyPress::ALT {
                     self.move_cursor(&Direction::ScrollDown);
-                } else if key.modifier == KeyPress::CTRL {
-                    if self.current + 1 < self.documents.len() {
-                        self.current += 1;
-                    }
+                } else if key.modifier == KeyPress::CTRL && self.current + 1 < self.documents.len()
+                {
+                    self.current += 1;
                 }
                 true
             }
@@ -389,7 +384,7 @@ impl Editor {
     ///
     /// * `dir` - move direction
     fn move_cursor(&mut self, dir: &Direction) {
-        self.documents[self.current].move_cursor(&dir);
+        self.documents[self.current].move_cursor(dir);
         let offset = self.documents[self.current].cursor.offset;
         for (index, doc) in self.documents.iter_mut().enumerate() {
             if self.current != index {
@@ -399,6 +394,32 @@ impl Editor {
                 }
             }
         }
+
+        // update diff
+        let mut diff = BTreeSet::new();
+        for (index_l, doc_l) in self.documents.iter().enumerate() {
+            let page_l = &doc_l.page;
+            for (index_r, doc_r) in self.documents.iter().enumerate() {
+                if index_l == index_r {
+                    continue;
+                }
+                let page_r = &doc_r.page;
+                for offset in page_l.offset..page_l.offset + page_l.data.len() as u64 {
+                    let mut equal = false;
+                    if let Some(byte_l) = page_l.get_data(offset) {
+                        if let Some(byte_r) = page_r.get_data(offset) {
+                            equal = byte_l == byte_r;
+                        }
+                    }
+                    if !equal {
+                        diff.insert(offset);
+                    }
+                }
+            }
+        }
+        self.documents
+            .iter_mut()
+            .for_each(|doc| doc.page.diff = diff.clone());
     }
 
     /// Show mini help.

@@ -2,11 +2,11 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::changes::ChangeList;
-use super::cursor::*;
 use super::config::Config;
+use super::curses::Window;
+use super::cursor::*;
 use super::file::File;
 use super::page::Page;
-use super::curses::Window;
 use super::view::View;
 use std::io;
 
@@ -207,7 +207,8 @@ impl Document {
         self.page.data = self
             .get_data(offset, self.page.lines * self.page.columns)
             .unwrap();
-        self.page.update(&self.changes.real);
+        // update page with changed data
+        self.page.changed = self.changes.real.keys().cloned().collect();
     }
 }
 

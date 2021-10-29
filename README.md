@@ -8,7 +8,8 @@ Yet another hex editor.
 
 - Undo/redo;
 - Searching;
-- Highlighting the current position and changed data;
+- Visual diff between two or more files;
+- Highlighting the current position, changed data and diff;
 - Customizable UI.
 
 ## Build and install
