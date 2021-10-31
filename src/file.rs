@@ -18,15 +18,10 @@ pub struct File {
     /// Cached map of real changes (offset -> new byte value).
     pub changes: BTreeMap<u64, u8>,
     /// Data cache.
-    cache_data: Vec<u8>,
-    /// Start address of data cache.
-    cache_start: u64,
+    cache: Cache,
 }
 
 impl File {
-    /// Size of internal cache.
-    const CACHE_SIZE: usize = 4096;
-
     /// Open file.
     ///
     /// # Arguments
@@ -49,8 +44,7 @@ impl File {
             path,
             size: meta.len(),
             changes: BTreeMap::new(),
-            cache_data: Vec::with_capacity(File::CACHE_SIZE),
-            cache_start: 0,
+            cache: Cache::new(),
         })
     }
 
@@ -76,25 +70,21 @@ impl File {
         let size = size.min((self.size - offset) as usize);
 
         // update cache if needed
-        let cache_miss = offset < self.cache_start
-            || offset + size as u64 >= self.cache_start + self.cache_data.len() as u64;
-        if cache_miss {
-            let cache_size = File::CACHE_SIZE.min((self.size - offset) as usize);
-            self.cache_data.resize(cache_size, 0);
-            self.cache_start = offset;
+        if !self.cache.has(offset, size) {
+            let cache_size = Cache::SIZE.min((self.size - offset) as usize);
+            self.cache.data.resize(cache_size, 0);
+            self.cache.start = offset;
             self.file.seek(SeekFrom::Start(offset))?;
-            self.file.read_exact(&mut self.cache_data)?;
+            self.file.read_exact(&mut self.cache.data)?;
         }
 
-        let start = (offset - self.cache_start) as usize;
+        // get file data
+        let start = (offset - self.cache.start) as usize;
         let end = start + size;
+        let mut data = self.cache.data[start..end].to_vec();
 
-        // get file data in range and apply changes
-        let mut data = self.cache_data[start..end].to_vec();
-        for (&addr, &value) in self
-            .changes
-            .range(offset as u64..offset + data.len() as u64)
-        {
+        // apply changes
+        for (&addr, &value) in self.changes.range(offset..offset + size as u64) {
             let index = (addr - offset) as usize;
             data[index] = value;
         }
@@ -113,7 +103,7 @@ impl File {
         }
 
         // reset
-        self.cache_data.clear();
+        self.cache.data.clear();
         self.changes.clear();
 
         Ok(())
@@ -148,7 +138,7 @@ impl File {
         self.path = path;
 
         // reset
-        self.cache_data.clear();
+        self.cache.data.clear();
         self.changes.clear();
 
         Ok(())
@@ -173,5 +163,31 @@ impl File {
         } else {
             file.to_string()
         }
+    }
+}
+
+/// Data cache.
+struct Cache {
+    /// Cache buffer.
+    data: Vec<u8>,
+    /// Start address of the cache.
+    start: u64,
+}
+
+impl Cache {
+    /// Size of the cache.
+    const SIZE: usize = 4096;
+
+    /// Create new cache instance.
+    fn new() -> Self {
+        Self {
+            data: Vec::with_capacity(Cache::SIZE),
+            start: 0,
+        }
+    }
+
+    /// Check if cache contains specified range.
+    fn has(&self, offset: u64, size: usize) -> bool {
+        offset >= self.start && offset + (size as u64) < self.start + self.data.len() as u64
     }
 }
