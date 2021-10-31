@@ -159,7 +159,7 @@ impl View {
 
         // left part: path to the file and modifcation status
         let mut path = doc.file.path.clone();
-        if doc.changes.has_changes() {
+        if doc.file.is_modified() {
             path.push('*');
         }
         let path_len = path.graphemes(true).count();

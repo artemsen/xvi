@@ -41,7 +41,7 @@ impl Document {
 
     /// Write changes to the file.
     pub fn save(&mut self) -> io::Result<()> {
-        self.file.write(&self.changes.real)?;
+        self.file.write()?;
 
         // reset undo/redo buffer
         self.changes.reset();
@@ -53,7 +53,7 @@ impl Document {
 
     /// Save current file with the new name.
     pub fn save_as(&mut self, path: String) -> io::Result<()> {
-        self.file.write_copy(path, &self.changes.real)?;
+        self.file.write_copy(path)?;
 
         // reset undo/redo buffer
         self.changes.reset();
@@ -114,7 +114,7 @@ impl Document {
                 }
             }
 
-            let file_data = self.get_data(offset as u64, size as usize).unwrap();
+            let file_data = self.file.read(offset as u64, size as usize).unwrap();
             let mut window = file_data.windows(sequence.len());
             if !backward {
                 if let Some(pos) = window.position(|wnd| wnd == sequence) {
@@ -165,24 +165,8 @@ impl Document {
         let old = self.page.data[index];
         let new = (old & !mask) | (value & mask);
 
-        self.changes.set(self.cursor.offset, old, new);
+        self.file.changes = self.changes.set(self.cursor.offset, old, new);
         self.update_page(self.page.offset);
-    }
-
-    /// Get file data with applied local changes.
-    fn get_data(&mut self, offset: u64, size: usize) -> io::Result<Vec<u8>> {
-        debug_assert!(offset < self.file.size);
-
-        let mut data = self.file.read(offset, size)?;
-
-        // apply changes
-        let end_offset = offset + data.len() as u64;
-        for (&addr, &value) in self.changes.real.range(offset..end_offset) {
-            let index = (addr - offset) as usize;
-            data[index] = value;
-        }
-
-        Ok(data)
     }
 
     /// Resize view and page.
@@ -202,13 +186,14 @@ impl Document {
     /// Update currently displayed page.
     fn update_page(&mut self, offset: u64) {
         debug_assert!(self.page.lines != 0 && self.page.columns != 0); // not initialized yet?
+        debug_assert!(offset < self.file.size);
 
         self.page.offset = offset;
         self.page.data = self
-            .get_data(offset, self.page.lines * self.page.columns)
+            .file
+            .read(offset, self.page.lines * self.page.columns)
             .unwrap();
-        // update page with changed data
-        self.page.changed = self.changes.real.keys().cloned().collect();
+        self.page.changed = self.file.changes.keys().cloned().collect();
     }
 }
 

@@ -10,11 +10,13 @@ use std::path::PathBuf;
 /// Editable file.
 pub struct File {
     /// File handle
-    pub file: std::fs::File,
+    file: std::fs::File,
     /// Full path to the file.
     pub path: String,
     /// File size.
     pub size: u64,
+    /// Cached map of real changes (offset -> new byte value).
+    pub changes: BTreeMap<u64, u8>,
     /// Data cache.
     cache_data: Vec<u8>,
     /// Start address of data cache.
@@ -46,9 +48,15 @@ impl File {
             file,
             path,
             size: meta.len(),
+            changes: BTreeMap::new(),
             cache_data: Vec::with_capacity(File::CACHE_SIZE),
             cache_start: 0,
         })
+    }
+
+    /// Check if file is modofied.
+    pub fn is_modified(&self) -> bool {
+        !self.changes.is_empty()
     }
 
     /// Read up to `size` bytes from file.
@@ -80,25 +88,33 @@ impl File {
 
         let start = (offset - self.cache_start) as usize;
         let end = start + size;
-        Ok(self.cache_data[start..end].to_vec())
+
+        // get file data in range and apply changes
+        let mut data = self.cache_data[start..end].to_vec();
+        for (&addr, &value) in self
+            .changes
+            .range(offset as u64..offset + data.len() as u64)
+        {
+            let index = (addr - offset) as usize;
+            data[index] = value;
+        }
+
+        Ok(data)
     }
 
     /// Write changes to the current file.
-    ///
-    /// # Arguments
-    ///
-    /// * `changes` - map of changes
-    pub fn write(&mut self, changes: &BTreeMap<u64, u8>) -> io::Result<()> {
+    pub fn write(&mut self) -> io::Result<()> {
         // reopen file with the write permission
         let mut file = OpenOptions::new().write(true).open(self.path.clone())?;
         // write changes
-        for (&offset, &value) in changes.iter() {
+        for (&offset, &value) in self.changes.iter() {
             file.seek(SeekFrom::Start(offset))?;
             file.write_all(&[value])?;
         }
 
-        // reset cache
+        // reset
         self.cache_data.clear();
+        self.changes.clear();
 
         Ok(())
     }
@@ -109,7 +125,7 @@ impl File {
     ///
     /// * `path` - path to the new file
     /// * `changes` - map of changes
-    pub fn write_copy(&mut self, path: String, changes: &BTreeMap<u64, u8>) -> io::Result<()> {
+    pub fn write_copy(&mut self, path: String) -> io::Result<()> {
         // reopen file with the write permission
         let path = File::abs_path(&path);
         let mut file = OpenOptions::new()
@@ -120,13 +136,7 @@ impl File {
 
         let mut offset = 0;
         loop {
-            let mut data = self.read(offset, 512)?;
-
-            // apply changes
-            for (&ch_offset, &ch_value) in changes.range(offset..offset + data.len() as u64) {
-                data[(ch_offset - offset) as usize] = ch_value;
-            }
-
+            let data = self.read(offset, 512)?;
             file.write_all(&data)?;
             offset += data.len() as u64;
             if offset >= self.size {
@@ -137,8 +147,9 @@ impl File {
         self.file = file;
         self.path = path;
 
-        // reset cache
+        // reset
         self.cache_data.clear();
+        self.changes.clear();
 
         Ok(())
     }

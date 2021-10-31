@@ -17,8 +17,6 @@ pub struct ChangeList {
     changes: Vec<ByteChange>,
     /// Current position in the queue.
     index: usize,
-    /// Cached map of real changes (offset -> new byte value).
-    pub real: BTreeMap<u64, u8>,
 }
 
 impl ChangeList {
@@ -27,7 +25,6 @@ impl ChangeList {
         Self {
             changes: Vec::with_capacity(64),
             index: 0,
-            real: BTreeMap::new(),
         }
     }
 
@@ -38,13 +35,14 @@ impl ChangeList {
     /// * `offset` - address of the byte to modify
     /// * `old` - origin value of the byte
     /// * `new` - new value of the byte
-    pub fn set(&mut self, offset: u64, old: u8, new: u8) {
+    ///
+    /// Returns map with chages: offset -> value.
+    pub fn set(&mut self, offset: u64, old: u8, new: u8) -> BTreeMap<u64, u8> {
         // try to update the last changed value if it in the same offset
         if let Some(last) = self.changes.last_mut() {
             if last.offset == offset {
                 last.new = new;
-                self.refresh();
-                return;
+                return self.get();
             }
         }
 
@@ -55,7 +53,7 @@ impl ChangeList {
 
         self.changes.push(ByteChange { offset, old, new });
         self.index = self.changes.len();
-        self.refresh();
+        self.get()
     }
 
     /// Undo the last change.
@@ -66,7 +64,6 @@ impl ChangeList {
             None
         } else {
             self.index -= 1;
-            self.refresh();
             Some(self.changes[self.index])
         }
     }
@@ -79,39 +76,33 @@ impl ChangeList {
             None
         } else {
             self.index += 1;
-            self.refresh();
             Some(self.changes[self.index - 1])
         }
-    }
-
-    /// Check if the queue modifies source data.
-    ///
-    /// Returns `true` if source data was modified.
-    pub fn has_changes(&self) -> bool {
-        !self.real.is_empty()
     }
 
     /// Reset changes.
     pub fn reset(&mut self) {
         self.changes.clear();
         self.index = 0;
-        self.real.clear();
     }
 
-    /// Refresh the map of real changes.
-    fn refresh(&mut self) {
-        self.real.clear();
+    /// Get the map of real changes.
+    ///
+    /// Returns map with chages: offset -> value.
+    pub fn get(&self) -> BTreeMap<u64, u8> {
+        let mut real = BTreeMap::new();
         let mut origins = BTreeMap::new();
         for change in self.changes[0..self.index].iter() {
             origins.entry(change.offset).or_insert(change.old);
-            self.real.insert(change.offset, change.new);
+            real.insert(change.offset, change.new);
         }
         // remove changes that restore origin values
         for (offset, origin) in origins.iter() {
-            if origin == self.real.get(offset).unwrap() {
-                self.real.remove(offset);
+            if origin == real.get(offset).unwrap() {
+                real.remove(offset);
             }
         }
+        real
     }
 }
 
@@ -123,28 +114,27 @@ fn test_changesqueue() {
     ch.set(0x1235, 3, 4);
     ch.set(0x1235, 4, 5);
     ch.set(0x1235, 5, 6);
-    assert_eq!(ch.real.len(), 2);
-    assert_eq!(*ch.real.get(&0x1234).unwrap(), 2);
-    assert_eq!(*ch.real.get(&0x1235).unwrap(), 6);
+    let real = ch.get();
+    assert_eq!(real.len(), 2);
+    assert_eq!(*real.get(&0x1234).unwrap(), 2);
+    assert_eq!(*real.get(&0x1235).unwrap(), 6);
 
     ch.set(0x1234, 2, 1); // restore origin
-    assert_eq!(ch.real.len(), 1);
-    assert_eq!(*ch.real.get(&0x1235).unwrap(), 6);
+    let real = ch.get();
+    assert_eq!(real.len(), 1);
+    assert_eq!(*real.get(&0x1235).unwrap(), 6);
 
     ch.undo();
-    assert_eq!(ch.real.len(), 2);
-    assert!(ch.has_changes());
+    assert_eq!(ch.get().len(), 2);
     ch.undo();
-    assert_eq!(ch.real.len(), 1);
+    assert_eq!(ch.get().len(), 1);
     ch.undo();
-    assert_eq!(ch.real.len(), 0);
-    assert!(!ch.has_changes());
+    assert_eq!(ch.get().len(), 0);
     ch.undo();
 
     ch.redo();
-    assert!(ch.has_changes());
-    assert_eq!(ch.real.len(), 1);
+    assert_eq!(ch.get().len(), 1);
 
     ch.reset();
-    assert!(!ch.has_changes());
+    assert_eq!(ch.get().len(), 0);
 }

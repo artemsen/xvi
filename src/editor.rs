@@ -533,7 +533,7 @@ impl Editor {
     /// Exit from editor.
     fn exit(&mut self) -> bool {
         for doc in self.documents.iter_mut() {
-            if !doc.changes.has_changes() {
+            if !doc.file.is_modified() {
                 continue;
             }
             if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
