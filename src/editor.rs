@@ -397,23 +397,31 @@ impl Editor {
 
         // update diff
         let mut diff = BTreeSet::new();
-        for (index_l, doc_l) in self.documents.iter().enumerate() {
-            let page_l = &doc_l.page;
-            for (index_r, doc_r) in self.documents.iter().enumerate() {
-                if index_l == index_r {
-                    continue;
+        let start = self
+            .documents
+            .iter()
+            .min_by(|l, r| l.page.offset.cmp(&r.page.offset))
+            .unwrap()
+            .page
+            .offset;
+        let size = self
+            .documents
+            .iter()
+            .max_by(|l, r| l.page.data.len().cmp(&r.page.data.len()))
+            .unwrap()
+            .page
+            .data
+            .len();
+        let data = self.documents[0].file.read(start, size).unwrap();
+        for doc in self.documents.iter_mut().skip(1) {
+            let another_data = doc.file.read(start, size).unwrap();
+            for (index, byte) in data.iter().enumerate() {
+                let mut equal = false;
+                if let Some(another_byte) = another_data.get(index) {
+                    equal = byte == another_byte;
                 }
-                let page_r = &doc_r.page;
-                for offset in page_l.offset..page_l.offset + page_l.data.len() as u64 {
-                    let mut equal = false;
-                    if let Some(byte_l) = page_l.get_data(offset) {
-                        if let Some(byte_r) = page_r.get_data(offset) {
-                            equal = byte_l == byte_r;
-                        }
-                    }
-                    if !equal {
-                        diff.insert(offset);
-                    }
+                if !equal {
+                    diff.insert(start + index as u64);
                 }
             }
         }
