@@ -10,6 +10,7 @@ use super::widget::*;
 pub struct ProgressDlg {
     dlg: Dialog,
     bar: ItemId,
+    pub canceled: bool,
 }
 
 impl ProgressDlg {
@@ -18,7 +19,11 @@ impl ProgressDlg {
         let mut dlg = Dialog::new(50, 5, DialogType::Normal, title);
         let bar = dlg.add_next(ProgressBar::new());
         dlg.focus = dlg.add_button(Button::std(StdButton::Cancel, true));
-        Self { dlg, bar }
+        Self {
+            dlg,
+            bar,
+            canceled: false,
+        }
     }
 }
 
@@ -34,8 +39,8 @@ impl ProgressHandler for ProgressDlg {
         }
         // check for user interrupt
         if let Some(Event::KeyPress(key)) = Curses::peek_event() {
-            return !matches!(key.key, Key::Esc | Key::Enter | Key::Char(' '));
+            self.canceled = matches!(key.key, Key::Esc | Key::Enter | Key::Char(' '));
         }
-        true
+        !self.canceled
     }
 }

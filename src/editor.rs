@@ -518,7 +518,8 @@ impl Editor {
                 self.documents[self.current].find(&sequence, backward, &mut progress)
             {
                 self.move_cursor(&Direction::Absolute(offset));
-            } else {
+            } else if !progress.canceled {
+                self.draw();
                 MessageBox::new("Search", DialogType::Error)
                     .center("Sequence not found!")
                     .button(StdButton::Ok, true)
