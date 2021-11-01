@@ -46,7 +46,7 @@ impl Document {
         // reset undo/redo buffer
         self.changes.reset();
 
-        self.update_page(self.page.offset);
+        self.update();
 
         Ok(())
     }
@@ -58,7 +58,7 @@ impl Document {
         // reset undo/redo buffer
         self.changes.reset();
 
-        self.update_page(self.page.offset);
+        self.update();
 
         Ok(())
     }
@@ -136,37 +136,51 @@ impl Document {
     }
 
     /// Move cursor.
-    pub fn move_cursor(&mut self, dir: &Direction) {
+    pub fn move_cursor(&mut self, dir: &Direction) -> bool {
         let new_base = self.cursor.move_to(dir, &self.page, self.file.size);
-        if new_base != self.page.offset {
-            self.update_page(new_base);
+        let base_changed = new_base != self.page.offset;
+        if base_changed {
+            self.page.offset = new_base;
+            self.update();
         }
+        base_changed
     }
 
     /// Undo last change.
     pub fn undo(&mut self) {
         if let Some(change) = self.changes.undo() {
-            self.update_page(self.page.offset);
-            self.move_cursor(&Direction::Absolute(change.offset));
+            if !self.move_cursor(&Direction::Absolute(change.offset)) {
+                self.update();
+            }
         }
     }
 
     /// Redo (opposite to Undo).
     pub fn redo(&mut self) {
         if let Some(change) = self.changes.redo() {
-            self.update_page(self.page.offset);
-            self.move_cursor(&Direction::Absolute(change.offset));
+            if !self.move_cursor(&Direction::Absolute(change.offset)) {
+                self.update();
+            }
         }
     }
 
     /// Change data: replace byte value at the current cursor position.
-    pub fn modify(&mut self, value: u8, mask: u8) {
+    pub fn modify_cur(&mut self, value: u8, mask: u8) {
         let index = (self.cursor.offset - self.page.offset) as usize;
         let old = self.page.data[index];
         let new = (old & !mask) | (value & mask);
 
-        self.file.changes = self.changes.set(self.cursor.offset, old, new);
-        self.update_page(self.page.offset);
+        self.changes.set(self.cursor.offset, old, new);
+        self.update();
+    }
+
+    /// Change data: replace byte value at the specified position.
+    pub fn modify_at(&mut self, offset: u64, value: u8) {
+        let old = self.file.read(offset, 1).unwrap();
+        let old = old[0];
+        if old != value {
+            self.changes.set(offset, old, value);
+        }
     }
 
     /// Resize view and page.
@@ -178,21 +192,21 @@ impl Document {
         self.view.resize(parent);
         self.page.lines = self.view.lines;
         self.page.columns = self.view.columns;
-        let dir = Direction::Absolute(self.cursor.offset);
-        let base = self.cursor.move_to(&dir, &self.page, self.file.size);
-        self.update_page(base);
+        if !self.move_cursor(&Direction::Absolute(self.cursor.offset)) {
+            self.update();
+        }
     }
 
     /// Update currently displayed page.
-    fn update_page(&mut self, offset: u64) {
+    pub fn update(&mut self) {
         debug_assert!(self.page.lines != 0 && self.page.columns != 0); // not initialized yet?
-        debug_assert!(offset < self.file.size);
 
-        self.page.offset = offset;
         self.page.data = self
             .file
-            .read(offset, self.page.lines * self.page.columns)
+            .read(self.page.offset, self.page.lines * self.page.columns)
             .unwrap();
+
+        self.file.changes = self.changes.get();
         self.page.changed = self.file.changes.keys().cloned().collect();
     }
 }

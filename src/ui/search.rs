@@ -65,7 +65,6 @@ impl SearchDlg {
 
         dlg.rules
             .push(DialogRule::AllowExit(hex, Box::new(DisableEmpty {})));
-        dlg.cancel = btn_cancel;
 
         dlg.apply(hex);
 

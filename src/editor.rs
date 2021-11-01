@@ -7,6 +7,7 @@ use super::cursor::*;
 use super::document::Document;
 use super::history::*;
 use super::ui::dialog::*;
+use super::ui::fill::FillDlg;
 use super::ui::goto::GotoDlg;
 use super::ui::messagebox::*;
 use super::ui::progress::ProgressDlg;
@@ -25,11 +26,13 @@ pub struct Editor {
     current: usize,
 
     /// "Goto" configuration dialog.
-    goto: GotoDlg,
+    goto_dlg: GotoDlg,
     /// Search configuration dialog.
-    search: SearchDlg,
+    search_dlg: SearchDlg,
+    /// Fill range configuration dialog.
+    fill_dlg: FillDlg,
     /// View mode setup dialog.
-    setup: SetupDlg,
+    setup_dlg: SetupDlg,
 }
 
 impl Editor {
@@ -47,26 +50,22 @@ impl Editor {
             documents.push(Document::new(file, config)?);
         }
 
-        // initialize dialog windows
-        let goto = GotoDlg {
-            history: history.get_goto(),
-        };
-        let search = SearchDlg {
-            history: history.get_search(),
-            backward: false,
-        };
-        let setup = SetupDlg {
-            fixed_width: config.fixed_width,
-            ascii_table: config.ascii_table,
-        };
-
         // create instance
         let mut instance = Self {
             documents,
             current: 0,
-            goto,
-            search,
-            setup,
+            goto_dlg: GotoDlg {
+                history: history.get_goto(),
+            },
+            search_dlg: SearchDlg {
+                history: history.get_search(),
+                backward: false,
+            },
+            fill_dlg: FillDlg::default(),
+            setup_dlg: SetupDlg {
+                fixed_width: config.fixed_width,
+                ascii_table: config.ascii_table,
+            },
         };
         instance.resize();
 
@@ -133,19 +132,23 @@ impl Editor {
             }
             Key::F(5) => {
                 if key.modifier == KeyPress::SHIFT {
-                    self.find_next(self.search.backward);
+                    self.find_next(self.search_dlg.backward);
                 } else if key.modifier == KeyPress::ALT {
-                    self.find_next(!self.search.backward);
+                    self.find_next(!self.search_dlg.backward);
                 } else {
                     self.find();
                 }
                 true
             }
+            Key::F(6) => {
+                self.fill();
+                true
+            }
             Key::F(9) => {
-                if self.setup.show() {
+                if self.setup_dlg.show() {
                     for doc in self.documents.iter_mut() {
-                        doc.view.fixed_width = self.setup.fixed_width;
-                        doc.view.ascii_table = self.setup.ascii_table;
+                        doc.view.fixed_width = self.setup_dlg.fixed_width;
+                        doc.view.ascii_table = self.setup_dlg.ascii_table;
                         if doc.view.ascii_table.is_none() {
                             doc.cursor.set_place(Place::Hex);
                         }
@@ -312,7 +315,7 @@ impl Editor {
             if let Key::Char(' '..='~') = key.key {
                 if key.modifier == KeyPress::NONE {
                     if let Key::Char(chr) = key.key {
-                        self.documents[self.current].modify(chr as u8, 0xff);
+                        self.documents[self.current].modify_cur(chr as u8, 0xff);
                         self.move_cursor(&Direction::NextByte);
                     }
                 }
@@ -333,10 +336,10 @@ impl Editor {
                     self.find();
                 }
                 Key::Char('n') => {
-                    self.find_next(self.search.backward);
+                    self.find_next(self.search_dlg.backward);
                 }
                 Key::Char('N') => {
-                    self.find_next(!self.search.backward);
+                    self.find_next(!self.search_dlg.backward);
                 }
                 Key::Char('h') => {
                     self.move_cursor(&Direction::PrevByte);
@@ -365,7 +368,7 @@ impl Editor {
                                 } else {
                                     (half, 0x0f)
                                 };
-                            self.documents[self.current].modify(value, mask);
+                            self.documents[self.current].modify_cur(value, mask);
                             self.move_cursor(&Direction::NextHalf);
                         }
                     }
@@ -505,22 +508,25 @@ impl Editor {
 
     /// Goto to specified address.
     fn goto(&mut self) {
-        if let Some(offset) = self.goto.show(self.documents[self.current].cursor.offset) {
+        if let Some(offset) = self
+            .goto_dlg
+            .show(self.documents[self.current].cursor.offset)
+        {
             self.move_cursor(&Direction::Absolute(offset));
         }
     }
 
     /// Find position of the sequence.
     fn find(&mut self) {
-        if self.search.show() {
+        if self.search_dlg.show() {
             self.draw();
-            self.find_next(self.search.backward);
+            self.find_next(self.search_dlg.backward);
         }
     }
 
     /// Find next/previous position of the sequence.
     fn find_next(&mut self, backward: bool) {
-        if let Some(sequence) = self.search.get_sequence() {
+        if let Some(sequence) = self.search_dlg.get_sequence() {
             let mut progress = ProgressDlg::new("Searching...");
             if let Some(offset) =
                 self.documents[self.current].find(&sequence, backward, &mut progress)
@@ -534,8 +540,25 @@ impl Editor {
                     .show();
             }
         } else {
-            self.search.backward = backward;
+            self.search_dlg.backward = backward;
             self.find();
+        }
+    }
+
+    /// Fill range.
+    fn fill(&mut self) {
+        let doc = &mut self.documents[self.current];
+        if let Some((range, pattern)) = self.fill_dlg.show(doc.cursor.offset) {
+            let mut pattern_pos = 0;
+            for offset in range.start..range.end.min(doc.file.size) {
+                doc.modify_at(offset, pattern[pattern_pos]);
+                pattern_pos += 1;
+                if pattern_pos == pattern.len() {
+                    pattern_pos = 0;
+                }
+            }
+            doc.update();
+            self.move_cursor(&Direction::Absolute(range.end + 1));
         }
     }
 
@@ -572,8 +595,8 @@ impl Editor {
 
         // save history
         let mut history = History::new();
-        history.set_goto(&self.goto.history);
-        history.set_search(&self.search.history);
+        history.set_goto(&self.goto_dlg.history);
+        history.set_search(&self.search_dlg.history);
         self.documents
             .iter()
             .for_each(|doc| history.add_filepos(&doc.file.path, doc.cursor.offset));
@@ -595,7 +618,7 @@ impl Editor {
             "Goto",  // F3
             "",      // F4
             "Find",  // F5
-            "",      // F6
+            "Fill",  // F6
             "",      // F7
             "",      // F8
             "Setup", // F9

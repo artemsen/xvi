@@ -153,6 +153,16 @@ impl Dialog {
         self.items[id as usize].widget.as_mut().set_data(data);
     }
 
+    /// Check item state.
+    pub fn is_enabled(&self, id: ItemId) -> bool {
+        self.items[id as usize].enabled
+    }
+
+    /// Enable or disable item.
+    pub fn set_state(&mut self, id: ItemId, state: bool) {
+        self.items[id as usize].enabled = state;
+    }
+
     /// Apply rules for specified items.
     pub fn apply(&mut self, item: ItemId) {
         for it in self.rules.iter() {
@@ -243,6 +253,50 @@ impl Dialog {
         }
 
         rc
+    }
+    /// Run dialog: show window and handle external events.
+    pub fn run2(&mut self, handler: &mut dyn DialogHandler) -> Option<ItemId> {
+        // set focus to the first available widget
+        if self.focus < 0 {
+            self.move_focus(true);
+        }
+
+        // main event handler loop
+        loop {
+            // redraw
+            self.draw();
+
+            // handle next event
+            match Curses::wait_event() {
+                Event::TerminalResize => {}
+                Event::KeyPress(event) => {
+                    match event.key {
+                        Key::Tab => {
+                            self.move_focus(event.modifier != KeyPress::SHIFT);
+                        }
+                        Key::Esc => {
+                            return None;
+                        }
+                        Key::Enter => {
+                            if handler.on_close(self, self.focus) {
+                                return Some(self.focus);
+                            }
+                        }
+                        _ => {
+                            if self.focus >= 0 {
+                                if self.items[self.focus as usize].widget.keypress(&event) {
+                                    handler.on_item_change(self, self.focus);
+                                } else if event.key == Key::Left || event.key == Key::Up {
+                                    self.move_focus(false);
+                                } else if event.key == Key::Right || event.key == Key::Down {
+                                    self.move_focus(true);
+                                }
+                            }
+                        }
+                    };
+                }
+            }
+        }
     }
 
     /// Draw dialog.
@@ -335,6 +389,29 @@ pub struct DialogItem {
     wnd: Window,
     enabled: bool,
     widget: Box<dyn Widget>,
+}
+
+/// Dialog handlers.
+pub trait DialogHandler {
+    /// Check if dialog can be closed (not canceled).
+    ///
+    /// # Arguments
+    ///
+    /// * `dialog` - dialog instance
+    /// * `current` - currently focused item Id
+    ///
+    /// # Return value
+    ///
+    /// true if dialog can be closed.
+    fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool;
+
+    /// Item change callback.
+    ///
+    /// # Arguments
+    ///
+    /// * `dialog` - dialog instance
+    /// * `item` - Id of the item that was changed
+    fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId);
 }
 
 /// Dialog rules.

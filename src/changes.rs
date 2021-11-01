@@ -35,14 +35,12 @@ impl ChangeList {
     /// * `offset` - address of the byte to modify
     /// * `old` - origin value of the byte
     /// * `new` - new value of the byte
-    ///
-    /// Returns map with chages: offset -> value.
-    pub fn set(&mut self, offset: u64, old: u8, new: u8) -> BTreeMap<u64, u8> {
+    pub fn set(&mut self, offset: u64, old: u8, new: u8) {
         // try to update the last changed value if it in the same offset
         if let Some(last) = self.changes.last_mut() {
             if last.offset == offset {
                 last.new = new;
-                return self.get();
+                return;
             }
         }
 
@@ -53,7 +51,25 @@ impl ChangeList {
 
         self.changes.push(ByteChange { offset, old, new });
         self.index = self.changes.len();
-        self.get()
+    }
+
+    /// Get the map of real changes.
+    ///
+    /// Returns map with chages: offset -> value.
+    pub fn get(&self) -> BTreeMap<u64, u8> {
+        let mut real = BTreeMap::new();
+        let mut origins = BTreeMap::new();
+        for change in self.changes[0..self.index].iter() {
+            origins.entry(change.offset).or_insert(change.old);
+            real.insert(change.offset, change.new);
+        }
+        // remove changes that restore origin values
+        for (offset, origin) in origins.iter() {
+            if origin == real.get(offset).unwrap() {
+                real.remove(offset);
+            }
+        }
+        real
     }
 
     /// Undo the last change.
@@ -84,25 +100,6 @@ impl ChangeList {
     pub fn reset(&mut self) {
         self.changes.clear();
         self.index = 0;
-    }
-
-    /// Get the map of real changes.
-    ///
-    /// Returns map with chages: offset -> value.
-    pub fn get(&self) -> BTreeMap<u64, u8> {
-        let mut real = BTreeMap::new();
-        let mut origins = BTreeMap::new();
-        for change in self.changes[0..self.index].iter() {
-            origins.entry(change.offset).or_insert(change.old);
-            real.insert(change.offset, change.new);
-        }
-        // remove changes that restore origin values
-        for (offset, origin) in origins.iter() {
-            if origin == real.get(offset).unwrap() {
-                real.remove(offset);
-            }
-        }
-        real
     }
 }
 
