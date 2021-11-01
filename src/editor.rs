@@ -127,11 +127,11 @@ impl Editor {
                 }
                 true
             }
-            Key::F(5) => {
+            Key::F(3) => {
                 self.goto();
                 true
             }
-            Key::F(7) => {
+            Key::F(5) => {
                 if key.modifier == KeyPress::SHIFT {
                     self.find_next(self.search.backward);
                 } else if key.modifier == KeyPress::ALT {
@@ -583,11 +583,11 @@ impl Editor {
         let titles = &[
             "Help",  // F1
             "Save",  // F2
-            "",      // F3
+            "Goto",  // F3
             "",      // F4
-            "Goto",  // F5
+            "Find",  // F5
             "",      // F6
-            "Find",  // F7
+            "",      // F7
             "",      // F8
             "Setup", // F9
             "Exit",  // F10
