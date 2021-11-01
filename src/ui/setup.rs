@@ -36,9 +36,8 @@ impl SetupDlg {
 
         dlg.add_button(Button::std(StdButton::Ok, true));
         let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
-        dlg.cancel = btn_cancel;
 
-        if let Some(id) = dlg.run() {
+        if let Some(id) = dlg.run_simple() {
             if id != btn_cancel {
                 if let WidgetData::Bool(value) = dlg.get(fixed) {
                     self.fixed_width = value;

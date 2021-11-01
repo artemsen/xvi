@@ -8,11 +8,11 @@ use std::ops::Range;
 
 /// Dialog for setting "fill" parameters.
 pub struct FillDlg {
-    /// Last used pattern.
+    // Last used pattern.
     pattern: Vec<u8>,
-    /// Last used length of the range.
+    // Length of the last used range.
     length: u64,
-    // Dialog's items.
+    // Items of the dialog.
     item_start: ItemId,
     item_end: ItemId,
     item_length: ItemId,
@@ -91,7 +91,7 @@ impl FillDlg {
         self.item_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
 
         // run dialog
-        if let Some(id) = dlg.run2(self) {
+        if let Some(id) = dlg.run(self) {
             if id != self.item_cancel {
                 self.pattern = if let WidgetData::Text(value) = dlg.get(self.item_pattern) {
                     (0..value.len())

@@ -10,14 +10,10 @@ pub struct Dialog {
     wnd: Window,
     /// Items on the dialog window.
     items: Vec<DialogItem>,
-    /// Dialog's rules (links between items, etc).
-    pub rules: Vec<DialogRule>,
     /// Last used line number (used for easy dialog construction).
     pub last_line: usize,
     /// Currently focused item.
     pub focus: ItemId,
-    /// Identifier of the Cancel button to force exit.
-    pub cancel: ItemId,
     /// Dialog type (background color).
     dtype: DialogType,
 }
@@ -66,10 +62,8 @@ impl Dialog {
         Self {
             wnd,
             items: vec![border, separator],
-            rules: Vec::new(),
             last_line: Dialog::PADDING_Y,
             focus: -1,
-            cancel: -1,
             dtype: dt,
         }
     }
@@ -163,99 +157,8 @@ impl Dialog {
         self.items[id as usize].enabled = state;
     }
 
-    /// Apply rules for specified items.
-    pub fn apply(&mut self, item: ItemId) {
-        for it in self.rules.iter() {
-            match it {
-                DialogRule::CopyData(src, dst, handler) => {
-                    if item == *src {
-                        let data = self.items[*src as usize].widget.as_ref().get_data();
-                        if let Some(data) = handler.as_ref().copy_data(&data) {
-                            self.items[*dst as usize].widget.as_mut().set_data(data);
-                        }
-                    }
-                }
-                DialogRule::StateChange(src, dst, handler) => {
-                    if item == *src {
-                        let data = self.items[*src as usize].widget.as_ref().get_data();
-                        if let Some(state) = handler.as_ref().set_state(&data) {
-                            self.items[*dst as usize].enabled = state;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
     /// Run dialog: show window and handle external events.
-    pub fn run(&mut self) -> Option<ItemId> {
-        let mut rc = None;
-
-        // set focus to the first available widget
-        if self.focus < 0 {
-            self.move_focus(true);
-        }
-
-        // main event handler loop
-        loop {
-            // redraw
-            self.draw();
-
-            // handle next event
-            match Curses::wait_event() {
-                Event::TerminalResize => {}
-                Event::KeyPress(event) => {
-                    match event.key {
-                        Key::Tab => {
-                            self.move_focus(event.modifier != KeyPress::SHIFT);
-                        }
-                        Key::Esc => {
-                            break;
-                        }
-                        Key::Enter => {
-                            if self.focus == self.cancel {
-                                rc = Some(self.cancel);
-                                break;
-                            }
-                            let mut allow = true;
-                            'out: for it in self.rules.iter() {
-                                if let DialogRule::AllowExit(id, handler) = it {
-                                    for item in 0..self.items.len() {
-                                        if item as isize == *id
-                                            && !handler.allow_exit(&self.get(*id))
-                                        {
-                                            allow = false;
-                                            break 'out;
-                                        }
-                                    }
-                                }
-                            }
-                            if allow {
-                                rc = Some(self.focus);
-                                break;
-                            }
-                        }
-                        _ => {
-                            if self.focus >= 0 {
-                                if self.items[self.focus as usize].widget.keypress(&event) {
-                                    self.apply(self.focus);
-                                } else if event.key == Key::Left || event.key == Key::Up {
-                                    self.move_focus(false);
-                                } else if event.key == Key::Right || event.key == Key::Down {
-                                    self.move_focus(true);
-                                }
-                            }
-                        }
-                    };
-                }
-            }
-        }
-
-        rc
-    }
-    /// Run dialog: show window and handle external events.
-    pub fn run2(&mut self, handler: &mut dyn DialogHandler) -> Option<ItemId> {
+    pub fn run(&mut self, handler: &mut dyn DialogHandler) -> Option<ItemId> {
         // set focus to the first available widget
         if self.focus < 0 {
             self.move_focus(true);
@@ -297,6 +200,12 @@ impl Dialog {
                 }
             }
         }
+    }
+
+    /// Show simple dialog without external handlers.
+    pub fn run_simple(&mut self) -> Option<ItemId> {
+        let mut dummy = DialogEmptyHandler {};
+        self.run(&mut dummy)
     }
 
     /// Draw dialog.
@@ -414,44 +323,11 @@ pub trait DialogHandler {
     fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId);
 }
 
-/// Dialog rules.
-pub enum DialogRule {
-    /// Copy data from one widget to another if first one has been changed.
-    CopyData(ItemId, ItemId, Box<dyn CopyData>),
-    /// Enable or disable item depending on source data.
-    StateChange(ItemId, ItemId, Box<dyn StateChange>),
-    /// Check for exit.
-    AllowExit(ItemId, Box<dyn AllowExit>),
-}
-
-pub trait CopyData {
-    fn copy_data(&self, data: &WidgetData) -> Option<WidgetData>;
-}
-pub trait StateChange {
-    fn set_state(&self, data: &WidgetData) -> Option<bool>;
-}
-pub trait AllowExit {
-    fn allow_exit(&self, data: &WidgetData) -> bool;
-}
-
-/// Dialog rule: enables or disables item if data is empty.
-pub struct StateOnEmpty;
-impl StateChange for StateOnEmpty {
-    fn set_state(&self, data: &WidgetData) -> Option<bool> {
-        match data {
-            WidgetData::Text(value) => Some(!value.is_empty()),
-            _ => None,
-        }
+/// Empty dialog handler, used for simple dialogs.
+struct DialogEmptyHandler;
+impl DialogHandler for DialogEmptyHandler {
+    fn on_close(&mut self, _dialog: &mut Dialog, _current: ItemId) -> bool {
+        true
     }
-}
-
-/// Dialog rule: prevents exit if data is empty.
-pub struct DisableEmpty;
-impl AllowExit for DisableEmpty {
-    fn allow_exit(&self, data: &WidgetData) -> bool {
-        match data {
-            WidgetData::Text(value) => !value.is_empty(),
-            _ => true,
-        }
-    }
+    fn on_item_change(&mut self, _dialog: &mut Dialog, _item: ItemId) {}
 }

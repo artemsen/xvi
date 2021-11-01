@@ -54,19 +54,16 @@ impl Editor {
         let mut instance = Self {
             documents,
             current: 0,
-            goto_dlg: GotoDlg {
-                history: history.get_goto(),
-            },
-            search_dlg: SearchDlg {
-                history: history.get_search(),
-                backward: false,
-            },
+            goto_dlg: GotoDlg::default(),
+            search_dlg: SearchDlg::default(),
             fill_dlg: FillDlg::default(),
             setup_dlg: SetupDlg {
                 fixed_width: config.fixed_width,
                 ascii_table: config.ascii_table,
             },
         };
+        instance.goto_dlg.history = history.get_goto();
+        instance.search_dlg.history = history.get_search();
         instance.resize();
 
         // define and apply initial offset
@@ -478,7 +475,7 @@ impl Editor {
 
     /// Save current file with new name, returns false if operation failed.
     fn save_as(doc: &mut Document) -> bool {
-        if let Some(new_name) = SaveAsDlg::show(doc.file.path.clone()) {
+        if let Some(new_name) = SaveAsDlg::default().show(doc.file.path.clone()) {
             loop {
                 match doc.save_as(new_name.clone()) {
                     Ok(()) => {

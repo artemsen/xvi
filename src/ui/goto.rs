@@ -9,6 +9,14 @@ use super::widget::*;
 pub struct GotoDlg {
     /// Address history.
     pub history: Vec<u64>,
+    // Current offet (cursor position)
+    current: u64,
+    // Items of the dialog.
+    item_abshex: ItemId,
+    item_absdec: ItemId,
+    item_relhex: ItemId,
+    item_reldec: ItemId,
+    item_cancel: ItemId,
 }
 
 impl GotoDlg {
@@ -22,72 +30,109 @@ impl GotoDlg {
     ///
     /// Absolute offset to jump.
     pub fn show(&mut self, current: u64) -> Option<u64> {
+        self.current = current;
+
         let width = 44;
         let mut dlg = Dialog::new(width + Dialog::PADDING_X * 2, 9, DialogType::Normal, "Goto");
 
         dlg.add_next(Text::new("Absolute offset"));
-        let abshex = self.add_edit(&mut dlg, Dialog::PADDING_X, "hex:", EditFormat::HexUnsigned);
-        let absdec = self.add_edit(
-            &mut dlg,
-            Dialog::PADDING_X + 23,
-            "dec:",
-            EditFormat::DecUnsigned,
+
+        // absolute offset in dec
+        let mut widget = Edit::new(17, format!("{:x}", self.current), EditFormat::HexUnsigned);
+        widget.history = self.history.iter().map(|o| format!("{:x}", o)).collect();
+        dlg.add(
+            Window {
+                x: Dialog::PADDING_X,
+                y: dlg.last_line,
+                width,
+                height: 1,
+            },
+            Text::new("hex:"),
         );
-        dlg.last_line += 1; // skip
+        self.item_abshex = dlg.add(
+            Window {
+                x: Dialog::PADDING_X + 4,
+                y: dlg.last_line,
+                width: 17,
+                height: 1,
+            },
+            widget,
+        );
+
+        // absolute offset in dec
+        dlg.add(
+            Window {
+                x: Dialog::PADDING_X + 23,
+                y: dlg.last_line,
+                width,
+                height: 1,
+            },
+            Text::new("dec:"),
+        );
+        self.item_absdec = dlg.add(
+            Window {
+                x: Dialog::PADDING_X + 27,
+                y: dlg.last_line,
+                width: 17,
+                height: 1,
+            },
+            Edit::new(17, String::new(), EditFormat::HexUnsigned),
+        );
+
+        dlg.last_line += 1; // skip line
 
         dlg.add_separator();
         dlg.add_next(Text::new("Relative offset"));
-        let relhex = self.add_edit(&mut dlg, Dialog::PADDING_X, "hex:", EditFormat::HexSigned);
-        let reldec = self.add_edit(
-            &mut dlg,
-            Dialog::PADDING_X + 23,
-            "dec:",
-            EditFormat::DecSigned,
+
+        // relative offset in hex
+        dlg.add(
+            Window {
+                x: Dialog::PADDING_X,
+                y: dlg.last_line,
+                width,
+                height: 1,
+            },
+            Text::new("hex:"),
+        );
+        self.item_relhex = dlg.add(
+            Window {
+                x: Dialog::PADDING_X + 4,
+                y: dlg.last_line,
+                width: 17,
+                height: 1,
+            },
+            Edit::new(17, String::new(), EditFormat::HexSigned),
+        );
+
+        // relative offset in dec
+        dlg.add(
+            Window {
+                x: Dialog::PADDING_X + 23,
+                y: dlg.last_line,
+                width,
+                height: 1,
+            },
+            Text::new("dec:"),
+        );
+        self.item_reldec = dlg.add(
+            Window {
+                x: Dialog::PADDING_X + 27,
+                y: dlg.last_line,
+                width: 17,
+                height: 1,
+            },
+            Edit::new(17, String::new(), EditFormat::DecSigned),
         );
 
         dlg.add_button(Button::std(StdButton::Ok, true));
-        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
-        dlg.cancel = btn_cancel;
+        self.item_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
 
-        let conv = OffsetConverter::new(EditFormat::HexUnsigned, EditFormat::DecUnsigned, 0);
-        dlg.rules.push(DialogRule::CopyData(abshex, absdec, conv));
-        let conv = OffsetConverter::new(EditFormat::HexUnsigned, EditFormat::HexSigned, current);
-        dlg.rules.push(DialogRule::CopyData(abshex, relhex, conv));
-        let conv = OffsetConverter::new(EditFormat::HexUnsigned, EditFormat::DecSigned, current);
-        dlg.rules.push(DialogRule::CopyData(abshex, reldec, conv));
+        self.on_item_change(&mut dlg, self.item_abshex);
 
-        let conv = OffsetConverter::new(EditFormat::DecUnsigned, EditFormat::HexUnsigned, 0);
-        dlg.rules.push(DialogRule::CopyData(absdec, abshex, conv));
-        let conv = OffsetConverter::new(EditFormat::DecUnsigned, EditFormat::HexSigned, current);
-        dlg.rules.push(DialogRule::CopyData(absdec, relhex, conv));
-        let conv = OffsetConverter::new(EditFormat::DecUnsigned, EditFormat::DecSigned, current);
-        dlg.rules.push(DialogRule::CopyData(absdec, reldec, conv));
-
-        let conv = OffsetConverter::new(EditFormat::HexSigned, EditFormat::DecSigned, current);
-        dlg.rules.push(DialogRule::CopyData(relhex, reldec, conv));
-        let conv = OffsetConverter::new(EditFormat::HexSigned, EditFormat::HexUnsigned, current);
-        dlg.rules.push(DialogRule::CopyData(relhex, abshex, conv));
-        let conv = OffsetConverter::new(EditFormat::HexSigned, EditFormat::DecUnsigned, current);
-        dlg.rules.push(DialogRule::CopyData(relhex, absdec, conv));
-
-        let conv = OffsetConverter::new(EditFormat::DecSigned, EditFormat::HexSigned, current);
-        dlg.rules.push(DialogRule::CopyData(reldec, relhex, conv));
-        let conv = OffsetConverter::new(EditFormat::DecSigned, EditFormat::HexUnsigned, current);
-        dlg.rules.push(DialogRule::CopyData(reldec, abshex, conv));
-        let conv = OffsetConverter::new(EditFormat::DecSigned, EditFormat::DecUnsigned, current);
-        dlg.rules.push(DialogRule::CopyData(reldec, absdec, conv));
-
-        let init = if !self.history.is_empty() {
-            format!("{:x}", self.history[0])
-        } else {
-            "0".to_string()
-        };
-        dlg.set(abshex, WidgetData::Text(init));
-        dlg.apply(abshex);
-
-        if let Some(id) = dlg.run() {
-            if id != btn_cancel {
-                if let WidgetData::Text(value) = dlg.get(abshex) {
+        // run dialog
+        if let Some(id) = dlg.run(self) {
+            if id != self.item_cancel {
+                if let WidgetData::Text(value) = dlg.get(self.item_abshex) {
                     return match u64::from_str_radix(&value, 16) {
                         Ok(offset) => {
                             self.history.retain(|o| o != &offset);
@@ -102,75 +147,79 @@ impl GotoDlg {
         None
     }
 
-    /// Add edit field with title.
-    fn add_edit(&self, dlg: &mut Dialog, x: usize, title: &str, fmt: EditFormat) -> ItemId {
-        let text = Window {
-            x,
-            y: dlg.last_line,
-            width: title.len(),
-            height: 1,
-        };
-        let width = 17; // edit field length
-        let edit = Window {
-            x: x + text.width,
-            y: dlg.last_line,
-            width,
-            height: 1,
-        };
-
-        dlg.add(text, Text::new(title));
-
-        let mut widget = Edit::new(width, String::new(), fmt.clone());
-        // todo: refactor the code
-        if fmt == EditFormat::HexUnsigned {
-            let history = self.history.iter().map(|o| format!("{:x}", o)).collect();
-            widget.history = history;
+    /// Update fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `dialog` - dialog instance
+    /// * `source` - id of item that is the source of the changes
+    /// * `offset` - new absolute offset value
+    fn update(&mut self, dialog: &mut Dialog, source: ItemId, offset: u64) {
+        if source != self.item_abshex {
+            dialog.set(self.item_abshex, WidgetData::Text(format!("{:x}", offset)));
         }
-        dlg.add(edit, widget)
+        if source != self.item_absdec {
+            dialog.set(self.item_absdec, WidgetData::Text(format!("{}", offset)));
+        }
+        if source != self.item_relhex {
+            let offset = offset as i64 - self.current as i64;
+            let sign = if offset < 0 { "-" } else { "" };
+            let text = format!("{}{:x}", sign, i64::abs(offset));
+            dialog.set(self.item_relhex, WidgetData::Text(text));
+        }
+        if source != self.item_reldec {
+            let offset = offset as i64 - self.current as i64;
+            dialog.set(self.item_reldec, WidgetData::Text(format!("{}", offset)));
+        }
     }
 }
 
-/// Dialog rule: convert offset to different type.
-struct OffsetConverter {
-    pub src: EditFormat,
-    pub dst: EditFormat,
-    pub current: u64,
-}
-
-impl OffsetConverter {
-    fn new(src: EditFormat, dst: EditFormat, current: u64) -> Box<Self> {
-        Box::new(Self { src, dst, current })
+impl DialogHandler for GotoDlg {
+    fn on_close(&mut self, _dialog: &mut Dialog, _current: ItemId) -> bool {
+        true
     }
-}
 
-impl CopyData for OffsetConverter {
-    fn copy_data(&self, data: &WidgetData) -> Option<WidgetData> {
-        if let WidgetData::Text(value) = data {
-            let src = match self.src {
-                EditFormat::Any => unreachable!(),
-                EditFormat::HexStream => unreachable!(),
-                EditFormat::HexSigned => {
-                    self.current as i64 + i64::from_str_radix(value, 16).unwrap_or(0)
+    fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
+        let mut offset = 0;
+        if item == self.item_abshex {
+            if let WidgetData::Text(value) = dialog.get(item) {
+                offset = u64::from_str_radix(&value, 16).unwrap_or(0);
+            }
+        } else if item == self.item_absdec {
+            if let WidgetData::Text(value) = dialog.get(item) {
+                offset = value.parse::<u64>().unwrap_or(0);
+            }
+        } else if item == self.item_relhex {
+            if let WidgetData::Text(value) = dialog.get(item) {
+                let relative = i64::from_str_radix(&value, 16).unwrap_or(0);
+                if relative >= 0 || -relative < self.current as i64 {
+                    offset = (self.current as i64 + relative) as u64;
                 }
-                EditFormat::HexUnsigned => i64::from_str_radix(value, 16).unwrap_or(0),
-                EditFormat::DecSigned => self.current as i64 + value.parse::<i64>().unwrap_or(0),
-                EditFormat::DecUnsigned => value.parse::<i64>().unwrap_or(0),
-            };
-            let dst = match self.dst {
-                EditFormat::Any => unreachable!(),
-                EditFormat::HexStream => unreachable!(),
-                EditFormat::HexSigned => {
-                    let offset = src - self.current as i64;
-                    let sign = if offset < 0 { "-" } else { "+" };
-                    format!("{}{:x}", sign, i64::abs(offset))
+            }
+        } else if item == self.item_reldec {
+            if let WidgetData::Text(value) = dialog.get(item) {
+                let relative = value.parse::<i64>().unwrap_or(0);
+                if relative >= 0 || -relative < self.current as i64 {
+                    offset = (self.current as i64 + relative) as u64;
                 }
-                EditFormat::HexUnsigned => format!("{:x}", if src >= 0 { src } else { 0 }),
-                EditFormat::DecSigned => format!("{:+}", src - self.current as i64),
-                EditFormat::DecUnsigned => format!("{}", if src >= 0 { src } else { 0 }),
-            };
-            Some(WidgetData::Text(dst))
+            }
         } else {
-            None
+            return;
+        }
+        self.update(dialog, item, offset);
+    }
+}
+
+impl Default for GotoDlg {
+    fn default() -> Self {
+        Self {
+            history: Vec::new(),
+            current: 0,
+            item_abshex: -1,
+            item_absdec: -1,
+            item_relhex: -1,
+            item_reldec: -1,
+            item_cancel: -1,
         }
     }
 }

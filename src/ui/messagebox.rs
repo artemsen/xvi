@@ -89,7 +89,7 @@ impl MessageBox {
             }
         }
 
-        if let Some(id) = dlg.run() {
+        if let Some(id) = dlg.run_simple() {
             return Some(*button_ids.get(&id).unwrap());
         }
         None
