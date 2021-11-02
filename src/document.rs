@@ -6,7 +6,6 @@ use super::config::Config;
 use super::curses::Window;
 use super::cursor::*;
 use super::file::File;
-use super::page::Page;
 use super::view::View;
 use std::io;
 
@@ -16,8 +15,6 @@ pub struct Document {
     pub file: File,
     /// Change list.
     pub changes: ChangeList,
-    /// Currently displayed page.
-    pub page: Page,
     /// Cursor position within a page.
     pub cursor: Cursor,
     /// View of the document.
@@ -33,7 +30,6 @@ impl Document {
         Ok(Self {
             file,
             changes: ChangeList::new(),
-            page: Page::new(),
             cursor: Cursor::new(),
             view: View::new(config, file_size),
         })
@@ -137,10 +133,10 @@ impl Document {
 
     /// Move cursor.
     pub fn move_cursor(&mut self, dir: &Direction) -> bool {
-        let new_base = self.cursor.move_to(dir, &self.page, self.file.size);
-        let base_changed = new_base != self.page.offset;
+        let new_base = self.cursor.move_to(dir, &self.view);
+        let base_changed = new_base != self.view.offset;
         if base_changed {
-            self.page.offset = new_base;
+            self.view.offset = new_base;
             self.update();
         }
         base_changed
@@ -166,8 +162,8 @@ impl Document {
 
     /// Change data: replace byte value at the current cursor position.
     pub fn modify_cur(&mut self, value: u8, mask: u8) {
-        let index = (self.cursor.offset - self.page.offset) as usize;
-        let old = self.page.data[index];
+        let index = (self.cursor.offset - self.view.offset) as usize;
+        let old = self.view.data[index];
         let new = (old & !mask) | (value & mask);
 
         self.changes.set(self.cursor.offset, old, new);
@@ -190,8 +186,6 @@ impl Document {
     /// * `parent` - parent window
     pub fn resize(&mut self, parent: Window) {
         self.view.resize(parent);
-        self.page.lines = self.view.lines;
-        self.page.columns = self.view.columns;
         if !self.move_cursor(&Direction::Absolute(self.cursor.offset)) {
             self.update();
         }
@@ -199,15 +193,15 @@ impl Document {
 
     /// Update currently displayed page.
     pub fn update(&mut self) {
-        debug_assert!(self.page.lines != 0 && self.page.columns != 0); // not initialized yet?
-
-        self.page.data = self
-            .file
-            .read(self.page.offset, self.page.lines * self.page.columns)
-            .unwrap();
+        debug_assert!(self.view.lines != 0 && self.view.columns != 0); // not initialized yet?
 
         self.file.changes = self.changes.get();
-        self.page.changed = self.file.changes.keys().cloned().collect();
+
+        self.view.data = self
+            .file
+            .read(self.view.offset, self.view.lines * self.view.columns)
+            .unwrap();
+        self.view.changes = self.file.changes.keys().cloned().collect();
     }
 }
 

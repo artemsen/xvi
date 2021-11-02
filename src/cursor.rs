@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::page::Page;
+use super::view::View;
 
 /// Cursor position and movement.
 pub struct Cursor {
@@ -36,15 +36,14 @@ impl Cursor {
     /// # Arguments
     ///
     /// * `dir` - move direction
-    /// * `page` - currently displayed page
-    /// * `max` - maximum possible offset (file size)
+    /// * `view` - view instance
     ///
     /// # Return value
     ///
     /// New page offset.
-    pub fn move_to(&mut self, dir: &Direction, page: &Page, max: u64) -> u64 {
-        let page_size = (page.lines * page.columns) as u64;
-        let mut new_base = page.offset;
+    pub fn move_to(&mut self, dir: &Direction, view: &View) -> u64 {
+        let page_size = (view.lines * view.columns) as u64;
+        let mut new_base = view.offset;
 
         match dir {
             Direction::PrevHalf => {
@@ -60,11 +59,11 @@ impl Cursor {
                     self.offset -= 1;
                 }
                 if self.offset < new_base {
-                    new_base -= page.columns as u64;
+                    new_base -= view.columns as u64;
                 }
             }
             Direction::NextHalf => {
-                if self.offset == max - 1
+                if self.offset == view.max_offset - 1
                     || (self.place == Place::Hex && self.half == HalfByte::Left)
                 {
                     self.half = HalfByte::Right;
@@ -72,7 +71,7 @@ impl Cursor {
                     self.half = HalfByte::Left;
                     self.offset += 1;
                     if self.offset >= new_base + page_size {
-                        new_base += page.columns as u64;
+                        new_base += view.columns as u64;
                     }
                 }
             }
@@ -81,16 +80,16 @@ impl Cursor {
                 if self.offset != 0 {
                     self.offset -= 1;
                     if self.offset < new_base {
-                        new_base -= page.columns as u64;
+                        new_base -= view.columns as u64;
                     }
                 }
             }
             Direction::NextByte => {
                 self.half = HalfByte::Left;
-                if self.offset < max - 1 {
+                if self.offset < view.max_offset - 1 {
                     self.offset += 1;
                     if self.offset >= new_base + page_size {
-                        new_base += page.columns as u64;
+                        new_base += view.columns as u64;
                     }
                 }
             }
@@ -98,63 +97,63 @@ impl Cursor {
                 if self.offset != 0 {
                     self.offset -= Cursor::WORD_SIZE - self.offset % Cursor::WORD_SIZE;
                     if self.offset < new_base {
-                        new_base -= page.columns as u64;
+                        new_base -= view.columns as u64;
                     }
                 }
                 self.half = HalfByte::Left;
             }
             Direction::NextWord => {
                 self.offset += Cursor::WORD_SIZE - self.offset % Cursor::WORD_SIZE;
-                if self.offset > max - 1 {
-                    self.offset = max - 1;
+                if self.offset > view.max_offset - 1 {
+                    self.offset = view.max_offset - 1;
                 }
                 if self.offset >= new_base + page_size {
-                    new_base += page.columns as u64;
+                    new_base += view.columns as u64;
                 }
                 self.half = HalfByte::Left;
             }
             Direction::LineBegin => {
-                self.offset -= self.offset % (page.columns as u64);
+                self.offset -= self.offset % (view.columns as u64);
                 self.half = HalfByte::Left;
             }
             Direction::LineEnd => {
-                self.offset += page.columns as u64 - self.offset % (page.columns as u64) - 1;
-                if self.offset > max - 1 {
-                    self.offset = max - 1;
+                self.offset += view.columns as u64 - self.offset % (view.columns as u64) - 1;
+                if self.offset > view.max_offset - 1 {
+                    self.offset = view.max_offset - 1;
                 }
                 self.half = HalfByte::Left;
             }
             Direction::LineUp => {
-                if self.offset >= page.columns as u64 {
-                    self.offset -= page.columns as u64;
+                if self.offset >= view.columns as u64 {
+                    self.offset -= view.columns as u64;
                     if self.offset < new_base {
-                        new_base -= page.columns as u64;
+                        new_base -= view.columns as u64;
                     }
                 }
             }
             Direction::LineDown => {
-                if self.offset + (page.columns as u64) < max {
-                    self.offset += page.columns as u64;
-                } else if self.offset + (page.columns as u64) - self.offset % (page.columns as u64)
-                    < max
+                if self.offset + (view.columns as u64) < view.max_offset {
+                    self.offset += view.columns as u64;
+                } else if self.offset + (view.columns as u64) - self.offset % (view.columns as u64)
+                    < view.max_offset
                 {
-                    self.offset = max - 1;
+                    self.offset = view.max_offset - 1;
                     self.half = HalfByte::Left;
                 }
                 if self.offset >= new_base + page_size {
-                    new_base += page.columns as u64;
+                    new_base += view.columns as u64;
                 }
             }
             Direction::ScrollUp => {
                 if new_base != 0 {
-                    new_base -= page.columns as u64;
-                    self.offset -= page.columns as u64;
+                    new_base -= view.columns as u64;
+                    self.offset -= view.columns as u64;
                 }
             }
             Direction::ScrollDown => {
-                if new_base + page_size + 1 < max {
-                    new_base += page.columns as u64;
-                    self.offset += page.columns as u64;
+                if new_base + page_size + 1 < view.max_offset {
+                    new_base += view.columns as u64;
+                    self.offset += view.columns as u64;
                 }
             }
             Direction::PageUp => {
@@ -168,21 +167,21 @@ impl Cursor {
                 }
             }
             Direction::PageDown => {
-                if new_base + page_size * 2 < max {
+                if new_base + page_size * 2 < view.max_offset {
                     new_base += page_size;
                     self.offset += page_size;
                 } else {
-                    if page_size > max {
+                    if page_size > view.max_offset {
                         new_base = 0;
                     } else {
-                        new_base = max - page_size;
-                        let align = max % page.columns as u64;
+                        new_base = view.max_offset - page_size;
+                        let align = view.max_offset % view.columns as u64;
                         new_base -= align;
                         if align != 0 {
-                            new_base += page.columns as u64;
+                            new_base += view.columns as u64;
                         }
                     }
-                    self.offset = max - 1;
+                    self.offset = view.max_offset - 1;
                     self.half = HalfByte::Left;
                 }
             }
@@ -192,21 +191,25 @@ impl Cursor {
                 self.half = HalfByte::Left;
             }
             Direction::FileEnd => {
-                self.offset = max - 1;
+                self.offset = view.max_offset - 1;
                 self.half = HalfByte::Left;
-                if page_size > max {
+                if page_size > view.max_offset {
                     new_base = 0;
                 } else {
-                    new_base = max - page_size;
-                    let align = max % page.columns as u64;
+                    new_base = view.max_offset - page_size;
+                    let align = view.max_offset % view.columns as u64;
                     new_base -= align;
                     if align != 0 {
-                        new_base += page.columns as u64;
+                        new_base += view.columns as u64;
                     }
                 }
             }
             Direction::Absolute(offset) => {
-                self.offset = if offset < &max { *offset } else { max - 1 };
+                self.offset = if offset < &view.max_offset {
+                    *offset
+                } else {
+                    view.max_offset - 1
+                };
                 self.half = HalfByte::Left;
                 if self.offset < new_base || self.offset > new_base + page_size {
                     if self.offset > page_size / 3 {
@@ -214,24 +217,24 @@ impl Cursor {
                     } else {
                         new_base = self.offset;
                     }
-                    new_base -= new_base % page.columns as u64;
+                    new_base -= new_base % view.columns as u64;
                 }
-                if new_base + page_size > max {
-                    if page_size > max {
+                if new_base + page_size > view.max_offset {
+                    if page_size > view.max_offset {
                         new_base = 0;
                     } else {
-                        new_base = max - page_size;
-                        let align = max % page.columns as u64;
+                        new_base = view.max_offset - page_size;
+                        let align = view.max_offset % view.columns as u64;
                         new_base -= align;
                         if align != 0 {
-                            new_base += page.columns as u64;
+                            new_base += view.columns as u64;
                         }
                     }
                 }
             }
         };
 
-        new_base - new_base % page.columns as u64
+        new_base - new_base % view.columns as u64
     }
 }
 

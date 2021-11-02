@@ -354,3 +354,13 @@ impl Window {
         );
     }
 }
+impl Default for Window {
+    fn default() -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        }
+    }
+}

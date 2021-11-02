@@ -400,16 +400,16 @@ impl Editor {
         let start = self
             .documents
             .iter()
-            .min_by(|l, r| l.page.offset.cmp(&r.page.offset))
+            .min_by(|l, r| l.view.offset.cmp(&r.view.offset))
             .unwrap()
-            .page
+            .view
             .offset;
         let size = self
             .documents
             .iter()
-            .max_by(|l, r| l.page.data.len().cmp(&r.page.data.len()))
+            .max_by(|l, r| l.view.data.len().cmp(&r.view.data.len()))
             .unwrap()
-            .page
+            .view
             .data
             .len();
         let data = self.documents[0].file.read(start, size).unwrap();
@@ -427,7 +427,7 @@ impl Editor {
         }
         self.documents
             .iter_mut()
-            .for_each(|doc| doc.page.diff = diff.clone());
+            .for_each(|doc| doc.view.differs = diff.clone());
     }
 
     /// Show mini help.
@@ -639,11 +639,10 @@ impl Editor {
 
         // show cursor
         let doc = &self.documents[self.current];
-        if let Some((mut x, y)) = doc.view.get_position(
-            doc.page.offset,
-            doc.cursor.offset,
-            doc.cursor.place == Place::Hex,
-        ) {
+        if let Some((mut x, y)) = doc
+            .view
+            .get_position(doc.cursor.offset, doc.cursor.place == Place::Hex)
+        {
             if doc.cursor.half == HalfByte::Right {
                 x += 1;
             }

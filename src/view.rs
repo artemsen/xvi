@@ -5,6 +5,7 @@ use super::ascii::AsciiTable;
 use super::config::Config;
 use super::curses::{Color, Curses, Window};
 use super::document::Document;
+use std::collections::BTreeSet;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Document view.
@@ -13,18 +14,30 @@ pub struct View {
     pub fixed_width: bool,
     /// ASCII characters table (None hides the field).
     pub ascii_table: Option<&'static AsciiTable>,
+
+    /// Max offset (file size).
+    pub max_offset: u64,
+
     /// Number of lines per page.
     pub lines: usize,
     /// Number of bytes per line.
     pub columns: usize,
-    /// Max offset (file size).
-    pub max_offset: u64,
+
+    /// Window for the view.
+    pub window: Window,
     /// Size of the offset field.
     pub offset_width: usize,
     /// Size of the hex field.
     pub hex_width: usize,
-    /// Window for the view.
-    pub window: Window,
+
+    /// Start address of currently displayed page.
+    pub offset: u64,
+    /// File data of currently displayed page.
+    pub data: Vec<u8>,
+    /// Addresses of changed values on the current page.
+    pub changes: BTreeSet<u64>,
+    /// Addresses of diff values on the current page.
+    pub differs: BTreeSet<u64>,
 }
 
 impl View {
@@ -40,17 +53,16 @@ impl View {
         Self {
             fixed_width: config.fixed_width,
             ascii_table: config.ascii_table,
+            max_offset: file_size,
             lines: 0,
             columns: 0,
+            window: Window::default(),
             offset_width: 0,
-            max_offset: file_size,
             hex_width: 0,
-            window: Window {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
-            },
+            offset: u64::MAX,
+            data: Vec::new(),
+            changes: BTreeSet::new(),
+            differs: BTreeSet::new(),
         }
     }
 
@@ -137,7 +149,7 @@ impl View {
     fn draw_statusbar(&self, doc: &Document) {
         // right part: charset, position, etc
         let mut stat = String::new();
-        let value = doc.page.get_data(doc.cursor.offset).unwrap();
+        let value = self.data[(doc.cursor.offset - self.offset) as usize];
         let percent = (doc.cursor.offset * 100
             / if doc.file.size > 1 {
                 doc.file.size - 1
@@ -191,7 +203,7 @@ impl View {
         let mut ascii = String::with_capacity(self.columns);
 
         for y in 0..self.lines {
-            let offset = doc.page.offset + (y * self.columns) as u64;
+            let offset = self.offset + (y * self.columns) as u64;
             let line = if offset >= doc.file.size {
                 // fill with spaces to erase previous text
                 (0..self.window.width).map(|_| ' ').collect::<String>()
@@ -206,7 +218,7 @@ impl View {
                             hex.push(' '); // word delimiter
                         }
                     }
-                    if let Some(&byte) = doc.page.get_data(offset + x as u64) {
+                    if let Some(&byte) = self.data.get((offset + x as u64 - self.offset) as usize) {
                         hex.push_str(&format!("{:02x}", byte));
                         if let Some(table) = self.ascii_table {
                             ascii.push(table.charset[byte as usize]);
@@ -245,10 +257,10 @@ impl View {
     fn colorize(&self, doc: &Document) {
         // calculate cursor position (indexes within the page data)
         let cursor_x = doc.cursor.offset as usize % self.columns;
-        let cursor_y = (doc.cursor.offset - doc.page.offset) as usize / self.columns;
+        let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
 
         for y in 0..self.lines {
-            if doc.page.offset + (y * self.columns) as u64 >= doc.file.size {
+            if self.offset + (y * self.columns) as u64 >= doc.file.size {
                 break;
             }
             let display_y = y + 1 /* status bar */;
@@ -305,14 +317,13 @@ impl View {
         }
 
         // highlight diff
-        for &offset in doc
-            .page
-            .diff
-            .range(doc.page.offset..(doc.page.offset + doc.page.data.len() as u64))
+        for &offset in self
+            .differs
+            .range(self.offset..(self.offset + self.data.len() as u64))
         {
             let cx = offset as usize % self.columns;
-            let cy = (offset - doc.page.offset) as usize / self.columns;
-            if let Some((x, y)) = self.get_position(doc.page.offset, offset, true) {
+            let cy = (offset - self.offset) as usize / self.columns;
+            if let Some((x, y)) = self.get_position(offset, true) {
                 let color = if cx == cursor_x || cy == cursor_y {
                     Color::HexDiffHi
                 } else {
@@ -320,7 +331,7 @@ impl View {
                 };
                 self.window.color(x, y, View::HEX_LEN, color);
             }
-            if let Some((x, y)) = self.get_position(doc.page.offset, offset, false) {
+            if let Some((x, y)) = self.get_position(offset, false) {
                 let color = if cx == cursor_x || cy == cursor_y {
                     Color::AsciiDiffHi
                 } else {
@@ -331,14 +342,13 @@ impl View {
         }
 
         // highlight changes
-        for &offset in doc
-            .page
-            .changed
-            .range(doc.page.offset..(doc.page.offset + doc.page.data.len() as u64))
+        for &offset in self
+            .changes
+            .range(self.offset..(self.offset + self.data.len() as u64))
         {
             let cx = offset as usize % self.columns;
-            let cy = (offset - doc.page.offset) as usize / self.columns;
-            if let Some((x, y)) = self.get_position(doc.page.offset, offset, true) {
+            let cy = (offset - self.offset) as usize / self.columns;
+            if let Some((x, y)) = self.get_position(offset, true) {
                 let color = if cx == cursor_x || cy == cursor_y {
                     Color::HexModifiedHi
                 } else {
@@ -346,7 +356,7 @@ impl View {
                 };
                 self.window.color(x, y, View::HEX_LEN, color);
             }
-            if let Some((x, y)) = self.get_position(doc.page.offset, offset, false) {
+            if let Some((x, y)) = self.get_position(offset, false) {
                 let color = if cx == cursor_x || cy == cursor_y {
                     Color::AsciiModifiedHi
                 } else {
@@ -361,19 +371,18 @@ impl View {
     ///
     /// # Arguments
     ///
-    /// * `base` - base offset, start address of the current page
     /// * `offset` - address of the byte
     /// * `hex` - field type, `true` for hex, `false` for ascii
     ///
     /// # Return value
     ///
     /// Coordinates of the byte relative to the view window.
-    pub fn get_position(&self, base: u64, offset: u64, hex: bool) -> Option<(usize, usize)> {
-        if offset < base {
+    pub fn get_position(&self, offset: u64, hex: bool) -> Option<(usize, usize)> {
+        if offset < self.offset {
             return None;
         }
 
-        let line = (offset - base) as usize / self.columns;
+        let line = (offset - self.offset) as usize / self.columns;
         if line >= self.lines {
             return None;
         }

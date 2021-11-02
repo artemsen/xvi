@@ -12,7 +12,6 @@ mod editor;
 mod file;
 mod history;
 mod inifile;
-mod page;
 mod ui;
 mod view;
 
