@@ -63,7 +63,7 @@ impl FillDlg {
             },
             Edit::new(
                 16,
-                format!("{:x}", start + self.length),
+                format!("{:x}", start + self.length - 1),
                 EditFormat::HexUnsigned,
             ),
         );
@@ -106,7 +106,7 @@ impl FillDlg {
                 let start = self.get_start(&dlg);
                 let end = self.get_end(&dlg);
                 debug_assert!(start < end);
-                self.length = end - start;
+                self.length = end - start + 1;
                 return Some(((start..end), &self.pattern));
             }
         }
@@ -143,14 +143,14 @@ impl DialogHandler for FillDlg {
             let start = self.get_start(dialog);
             if item == self.item_length {
                 if let WidgetData::Text(val) = dialog.get(self.item_length) {
-                    length = val.parse::<u64>().unwrap_or(0);
-                    let end = format!("{:x}", start + length);
+                    length = val.parse::<u64>().unwrap_or(1);
+                    let end = format!("{:x}", start + length - 1);
                     dialog.set(self.item_end, WidgetData::Text(end));
                 }
             } else {
                 let end = self.get_end(dialog);
                 if end >= start {
-                    length = end - start;
+                    length = end - start + 1;
                 }
                 dialog.set(self.item_length, WidgetData::Text(format!("{}", length)));
             }
