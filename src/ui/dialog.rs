@@ -175,7 +175,8 @@ impl Dialog {
                 Event::KeyPress(event) => {
                     match event.key {
                         Key::Tab => {
-                            self.move_focus(event.modifier != KeyPress::SHIFT);
+                            let previous = self.move_focus(event.modifier != KeyPress::SHIFT);
+                            handler.on_focus_lost(self, previous);
                         }
                         Key::Esc => {
                             return None;
@@ -190,9 +191,11 @@ impl Dialog {
                                 if self.items[self.focus as usize].widget.keypress(&event) {
                                     handler.on_item_change(self, self.focus);
                                 } else if event.key == Key::Left || event.key == Key::Up {
-                                    self.move_focus(false);
+                                    let previous = self.move_focus(false);
+                                    handler.on_focus_lost(self, previous);
                                 } else if event.key == Key::Right || event.key == Key::Down {
-                                    self.move_focus(true);
+                                    let previous = self.move_focus(true);
+                                    handler.on_focus_lost(self, previous);
                                 }
                             }
                         }
@@ -257,20 +260,21 @@ impl Dialog {
         }
     }
 
-    /// Move the focus to the next/previous widget.
-    fn move_focus(&mut self, forward: bool) {
+    /// Move the focus to the next/previous widget, returns previously focused item Id.
+    fn move_focus(&mut self, forward: bool) -> ItemId {
         debug_assert!(!self.items.is_empty());
+
         let mut focus = self.focus;
         loop {
             focus += if forward { 1 } else { -1 };
             if focus == self.focus {
-                return; // no one focusable items
+                return -1; // no one focusable items
             }
             if focus < 0 {
                 focus = self.items.len() as isize - 1;
             } else if focus == self.items.len() as isize {
                 if self.focus == -1 {
-                    return; // no one focusable items
+                    return -1; // no one focusable items
                 }
                 focus = 0;
             }
@@ -278,8 +282,11 @@ impl Dialog {
                 break;
             }
         }
+
+        let previous = self.focus;
         self.focus = focus;
         self.items[focus as usize].widget.focus();
+        previous
     }
 }
 
@@ -312,7 +319,9 @@ pub trait DialogHandler {
     /// # Return value
     ///
     /// true if dialog can be closed.
-    fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool;
+    fn on_close(&mut self, _dialog: &mut Dialog, _current: ItemId) -> bool {
+        true
+    }
 
     /// Item change callback.
     ///
@@ -320,14 +329,17 @@ pub trait DialogHandler {
     ///
     /// * `dialog` - dialog instance
     /// * `item` - Id of the item that was changed
-    fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId);
+    fn on_item_change(&mut self, _dialog: &mut Dialog, _item: ItemId) {}
+
+    /// Focus lost callback.
+    ///
+    /// # Arguments
+    ///
+    /// * `dialog` - dialog instance
+    /// * `item` - Id of the item that lost focus
+    fn on_focus_lost(&mut self, _dialog: &mut Dialog, _item: ItemId) {}
 }
 
 /// Empty dialog handler, used for simple dialogs.
 struct DialogEmptyHandler;
-impl DialogHandler for DialogEmptyHandler {
-    fn on_close(&mut self, _dialog: &mut Dialog, _current: ItemId) -> bool {
-        true
-    }
-    fn on_item_change(&mut self, _dialog: &mut Dialog, _item: ItemId) {}
-}
+impl DialogHandler for DialogEmptyHandler {}

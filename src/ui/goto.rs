@@ -153,8 +153,29 @@ impl GotoDlg {
     ///
     /// * `dialog` - dialog instance
     /// * `source` - id of item that is the source of the changes
-    /// * `offset` - new absolute offset value
-    fn update(&mut self, dialog: &mut Dialog, source: ItemId, offset: u64) {
+    fn update(&mut self, dialog: &mut Dialog, source: ItemId) {
+        // calculate offset
+        let mut offset = 0;
+        if let WidgetData::Text(value) = dialog.get(source) {
+            if source == self.item_abshex {
+                offset = u64::from_str_radix(&value, 16).unwrap_or(0);
+            } else if source == self.item_absdec {
+                offset = value.parse::<u64>().unwrap_or(0);
+            } else if source == self.item_relhex {
+                let relative = i64::from_str_radix(&value, 16).unwrap_or(0);
+                if relative >= 0 || -relative < self.current as i64 {
+                    offset = (self.current as i64 + relative) as u64;
+                }
+            } else if source == self.item_reldec {
+                let relative = value.parse::<i64>().unwrap_or(0);
+                if relative >= 0 || -relative < self.current as i64 {
+                    offset = (self.current as i64 + relative) as u64;
+                }
+            } else {
+                unreachable!();
+            }
+        }
+        // update other fields
         if source != self.item_abshex {
             dialog.set(self.item_abshex, WidgetData::Text(format!("{:x}", offset)));
         }
@@ -175,38 +196,17 @@ impl GotoDlg {
 }
 
 impl DialogHandler for GotoDlg {
-    fn on_close(&mut self, _dialog: &mut Dialog, _current: ItemId) -> bool {
-        true
+    fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
+        self.update(dialog, item);
     }
 
-    fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
-        let mut offset = 0;
-        if item == self.item_abshex {
-            if let WidgetData::Text(value) = dialog.get(item) {
-                offset = u64::from_str_radix(&value, 16).unwrap_or(0);
+    fn on_focus_lost(&mut self, dialog: &mut Dialog, item: ItemId) {
+        if let WidgetData::Text(value) = dialog.get(item) {
+            if value.is_empty() {
+                dialog.set(item, WidgetData::Text("0".to_string()));
+                self.update(dialog, item);
             }
-        } else if item == self.item_absdec {
-            if let WidgetData::Text(value) = dialog.get(item) {
-                offset = value.parse::<u64>().unwrap_or(0);
-            }
-        } else if item == self.item_relhex {
-            if let WidgetData::Text(value) = dialog.get(item) {
-                let relative = i64::from_str_radix(&value, 16).unwrap_or(0);
-                if relative >= 0 || -relative < self.current as i64 {
-                    offset = (self.current as i64 + relative) as u64;
-                }
-            }
-        } else if item == self.item_reldec {
-            if let WidgetData::Text(value) = dialog.get(item) {
-                let relative = value.parse::<i64>().unwrap_or(0);
-                if relative >= 0 || -relative < self.current as i64 {
-                    offset = (self.current as i64 + relative) as u64;
-                }
-            }
-        } else {
-            return;
         }
-        self.update(dialog, item, offset);
     }
 }
 

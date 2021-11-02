@@ -103,8 +103,9 @@ impl FillDlg {
                 } else {
                     vec![0]
                 };
-                let start = self.get_start(&dlg).unwrap();
-                let end = self.get_end(&dlg).unwrap();
+                let start = self.get_start(&dlg);
+                let end = self.get_end(&dlg);
+                debug_assert!(start < end);
                 self.length = end - start;
                 return Some(((start..end), &self.pattern));
             }
@@ -113,29 +114,20 @@ impl FillDlg {
     }
 
     /// Get start offset value.
-    fn get_start(&self, dialog: &Dialog) -> Option<u64> {
+    fn get_start(&self, dialog: &Dialog) -> u64 {
         if let WidgetData::Text(value) = dialog.get(self.item_start) {
-            u64::from_str_radix(&value, 16).ok()
+            u64::from_str_radix(&value, 16).unwrap_or(0)
         } else {
-            None
+            0
         }
     }
 
     /// Get end offset value.
-    fn get_end(&self, dialog: &Dialog) -> Option<u64> {
+    fn get_end(&self, dialog: &Dialog) -> u64 {
         if let WidgetData::Text(value) = dialog.get(self.item_end) {
-            u64::from_str_radix(&value, 16).ok()
+            u64::from_str_radix(&value, 16).unwrap_or(0)
         } else {
-            None
-        }
-    }
-
-    /// Get range length.
-    fn get_length(&self, dialog: &Dialog) -> Option<u64> {
-        if let WidgetData::Text(value) = dialog.get(self.item_length) {
-            value.parse::<u64>().ok()
-        } else {
-            None
+            0
         }
     }
 }
@@ -146,39 +138,37 @@ impl DialogHandler for FillDlg {
     }
 
     fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
-        let mut is_ok = false;
-        if item == self.item_start {
-            if let Some(start) = self.get_start(dialog) {
-                if let Some(length) = self.get_length(dialog) {
-                    let end = format!("{:x}", start + length);
-                    dialog.set(self.item_end, WidgetData::Text(end));
-                    is_ok = true;
-                }
-            }
-        } else if item == self.item_end {
+        if item == self.item_start || item == self.item_end || item == self.item_length {
             let mut length = 0;
-            if let Some(end) = self.get_end(dialog) {
-                if let Some(start) = self.get_start(dialog) {
-                    if end >= start {
-                        length = end - start;
-                        is_ok = true;
-                    }
-                }
-            }
-            let length = format!("{}", length);
-            dialog.set(self.item_length, WidgetData::Text(length));
-        } else if item == self.item_length {
-            if let Some(length) = self.get_length(dialog) {
-                if let Some(start) = self.get_start(dialog) {
+            let start = self.get_start(dialog);
+            if item == self.item_length {
+                if let WidgetData::Text(val) = dialog.get(self.item_length) {
+                    length = val.parse::<u64>().unwrap_or(0);
                     let end = format!("{:x}", start + length);
                     dialog.set(self.item_end, WidgetData::Text(end));
-                    is_ok = true;
+                }
+            } else {
+                let end = self.get_end(dialog);
+                if end >= start {
+                    length = end - start;
+                }
+                dialog.set(self.item_length, WidgetData::Text(format!("{}", length)));
+            }
+
+            dialog.set_state(self.item_ok, length != 0);
+        }
+    }
+
+    fn on_focus_lost(&mut self, dialog: &mut Dialog, item: ItemId) {
+        if let WidgetData::Text(value) = dialog.get(item) {
+            if value.is_empty() {
+                if item == self.item_start || item == self.item_end || item == self.item_length {
+                    dialog.set(item, WidgetData::Text("0".to_string()));
+                } else if item == self.item_pattern {
+                    dialog.set(item, WidgetData::Text("00".to_string()));
                 }
             }
-        } else {
-            is_ok = true;
         }
-        dialog.set_state(self.item_ok, is_ok);
     }
 }
 

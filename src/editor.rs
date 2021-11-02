@@ -558,7 +558,7 @@ impl Editor {
                 }
             }
             doc.update();
-            self.move_cursor(&Direction::Absolute(range.end + 1));
+            self.move_cursor(&Direction::Absolute(range.end));
         }
     }
 
