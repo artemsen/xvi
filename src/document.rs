@@ -201,7 +201,16 @@ impl Document {
             .file
             .read(self.view.offset, self.view.lines * self.view.columns)
             .unwrap();
-        self.view.changes = self.file.changes.keys().cloned().collect();
+        self.view.changes = self
+            .file
+            .changes
+            .keys()
+            .filter(|&o| {
+                (self.view.offset..self.view.offset + (self.view.lines * self.view.columns) as u64)
+                    .contains(o)
+            })
+            .cloned()
+            .collect();
     }
 }
 

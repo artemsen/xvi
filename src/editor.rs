@@ -396,38 +396,41 @@ impl Editor {
         }
 
         // update diff
-        let mut diff = BTreeSet::new();
-        let start = self
-            .documents
-            .iter()
-            .min_by(|l, r| l.view.offset.cmp(&r.view.offset))
-            .unwrap()
-            .view
-            .offset;
-        let size = self
-            .documents
-            .iter()
-            .max_by(|l, r| l.view.data.len().cmp(&r.view.data.len()))
-            .unwrap()
-            .view
-            .data
-            .len();
-        let data = self.documents[0].file.read(start, size).unwrap();
-        for doc in self.documents.iter_mut().skip(1) {
-            let another_data = doc.file.read(start, size).unwrap();
-            for (index, byte) in data.iter().enumerate() {
-                let mut equal = false;
-                if let Some(another_byte) = another_data.get(index) {
-                    equal = byte == another_byte;
-                }
-                if !equal {
-                    diff.insert(start + index as u64);
+        if self.documents.len() > 1 {
+            self.update_diff();
+        }
+    }
+
+    /// Caclulate diff between opened files.
+    fn update_diff(&mut self) {
+        for index in 0..self.documents.len() {
+            let mut diff = BTreeSet::new();
+            let offset = self.documents[index].view.offset;
+            let size = self.documents[index].view.lines * self.documents[index].view.columns;
+            let data_l = self.documents[index].file.read(offset, size).unwrap();
+            for (_, doc_r) in self
+                .documents
+                .iter_mut()
+                .enumerate()
+                .filter(|(i, _)| *i != index)
+            {
+                let data_r = if offset >= doc_r.file.size {
+                    vec![]
+                } else {
+                    doc_r.file.read(offset, size).unwrap()
+                };
+                for (index, byte_l) in data_l.iter().enumerate() {
+                    let mut equal = false;
+                    if let Some(byte_r) = data_r.get(index) {
+                        equal = byte_l == byte_r;
+                    }
+                    if !equal {
+                        diff.insert(offset + index as u64);
+                    }
                 }
             }
+            self.documents[index].view.differs = diff;
         }
-        self.documents
-            .iter_mut()
-            .for_each(|doc| doc.view.differs = diff.clone());
     }
 
     /// Show mini help.
