@@ -5,17 +5,18 @@ use super::config::Config;
 use super::curses::*;
 use super::cursor::*;
 use super::document::Document;
-use super::history::*;
+use super::history::History;
 use super::ui::cut::CutDlg;
-use super::ui::dialog::*;
+use super::ui::dialog::DialogType;
 use super::ui::fill::FillDlg;
 use super::ui::goto::GotoDlg;
-use super::ui::messagebox::*;
+use super::ui::insert::InsertDlg;
+use super::ui::messagebox::MessageBox;
 use super::ui::progress::ProgressDlg;
-use super::ui::saveas::*;
-use super::ui::search::*;
+use super::ui::saveas::SaveAsDlg;
+use super::ui::search::SearchDlg;
 use super::ui::setup::SetupDlg;
-use super::ui::widget::*;
+use super::ui::widget::StdButton;
 use std::collections::BTreeSet;
 
 /// Editor: implements business logic of a hex editor.
@@ -143,21 +144,16 @@ impl Editor {
                 self.fill();
                 true
             }
+            Key::F(7) => {
+                self.insert();
+                true
+            }
             Key::F(8) => {
                 self.cut();
                 true
             }
             Key::F(9) => {
-                if self.setup_dlg.show() {
-                    for doc in self.documents.iter_mut() {
-                        doc.view.fixed_width = self.setup_dlg.fixed_width;
-                        doc.view.ascii_table = self.setup_dlg.ascii_table;
-                        if doc.view.ascii_table.is_none() {
-                            doc.cursor.set_place(Place::Hex);
-                        }
-                    }
-                    self.resize();
-                }
+                self.setup();
                 true
             }
             Key::Tab => {
@@ -443,12 +439,11 @@ impl Editor {
     fn help(&self) {
         MessageBox::new("XVI: Hex editor", DialogType::Normal)
             .left("Arrows, PgUp, PgDown: move cursor;")
-            .left("Tab: switch between Hex/ASCII mode;")
+            .left("Tab: switch between Hex/ASCII;")
             .left("u or Ctrl+z: undo;")
             .left("Ctrl+r or Ctrl+y: redo;")
-            .left("F2: save file;")
-            .left("Shift+F2: save file with new name;")
-            .left("Esc, F10 or q: exit.")
+            .left("F2: save file; Shift+F2: save as;")
+            .left("Esc or F10: exit.")
             .left("")
             .center("Read `man xvi` for more info.")
             .button(StdButton::Ok, true)
@@ -486,6 +481,7 @@ impl Editor {
     fn save_as(doc: &mut Document) -> bool {
         if let Some(new_name) = SaveAsDlg::default().show(doc.file.path.clone()) {
             loop {
+                //todo: let mut progress = ProgressDlg::new("Save as...");
                 match doc.save_as(new_name.clone()) {
                     Ok(()) => {
                         return true;
@@ -557,25 +553,69 @@ impl Editor {
         if let Some((range, pattern)) =
             FillDlg::show(doc.cursor.offset, doc.file.size, &self.pattern)
         {
+            self.pattern = pattern;
             let mut pattern_pos = 0;
             for offset in range.start..range.end {
-                doc.modify_at(offset, pattern[pattern_pos]);
+                doc.modify_at(offset, self.pattern[pattern_pos]);
                 pattern_pos += 1;
-                if pattern_pos == pattern.len() {
+                if pattern_pos == self.pattern.len() {
                     pattern_pos = 0;
                 }
             }
             doc.update();
-            self.pattern = pattern;
             self.move_cursor(&Direction::Absolute(range.end));
+        }
+    }
+
+    /// Insert bytes.
+    fn insert(&mut self) {
+        let doc = &self.documents[self.current];
+        if doc.file.is_modified() {
+            MessageBox::new("Insert bytes", DialogType::Error)
+                .center(&doc.file.path)
+                .center("was modified.")
+                .center("Please save or undo your changes first.")
+                .button(StdButton::Ok, true)
+                .show();
+            return;
+        }
+        if let Some((mut offset, size, pattern)) = InsertDlg::show(doc.cursor.offset, &self.pattern)
+        {
+            self.pattern = pattern;
+            if offset > doc.file.size {
+                offset = doc.file.size;
+            }
+            self.draw();
+            let mut progress = ProgressDlg::new("Write file...");
+            let doc = &mut self.documents[self.current];
+            if let Err(err) = doc.file.insert(offset, size, &self.pattern, &mut progress) {
+                MessageBox::new("Error", DialogType::Error)
+                    .center("Error writing file")
+                    .center(&doc.file.path)
+                    .center(&format!("{}", err))
+                    .button(StdButton::Cancel, true)
+                    .show();
+            }
+            doc.on_file_changed(offset + size as u64);
         }
     }
 
     /// Cut out range.
     fn cut(&mut self) {
-        let doc = &mut self.documents[self.current];
+        let doc = &self.documents[self.current];
+        if doc.file.is_modified() {
+            MessageBox::new("Cut range", DialogType::Error)
+                .center(&doc.file.path)
+                .center("was modified.")
+                .center("Please save or undo your changes first.")
+                .button(StdButton::Ok, true)
+                .show();
+            return;
+        }
         if let Some(range) = CutDlg::show(doc.cursor.offset, doc.file.size) {
+            self.draw();
             let mut progress = ProgressDlg::new("Write file...");
+            let doc = &mut self.documents[self.current];
             if let Err(err) = doc.file.cut(&range, &mut progress) {
                 MessageBox::new("Error", DialogType::Error)
                     .center("Error writing file")
@@ -585,6 +625,20 @@ impl Editor {
                     .show();
             }
             doc.on_file_changed(range.end);
+        }
+    }
+
+    /// Setup via GUI.
+    fn setup(&mut self) {
+        if self.setup_dlg.show() {
+            for doc in self.documents.iter_mut() {
+                doc.view.fixed_width = self.setup_dlg.fixed_width;
+                doc.view.ascii_table = self.setup_dlg.ascii_table;
+                if doc.view.ascii_table.is_none() {
+                    doc.cursor.set_place(Place::Hex);
+                }
+            }
+            self.resize();
         }
     }
 
@@ -639,16 +693,16 @@ impl Editor {
         // draw key bar (bottom Fn line).
         let screen = Curses::get_screen();
         let titles = &[
-            "Help",  // F1
-            "Save",  // F2
-            "Goto",  // F3
-            "",      // F4
-            "Find",  // F5
-            "Fill",  // F6
-            "",      // F7
-            "Cut",   // F8
-            "Setup", // F9
-            "Exit",  // F10
+            "Help",   // F1
+            "Save",   // F2
+            "Goto",   // F3
+            "",       // F4
+            "Find",   // F5
+            "Fill",   // F6
+            "Insert", // F7
+            "Cut",    // F8
+            "Setup",  // F9
+            "Exit",   // F10
         ];
         let mut fn_line = String::new();
         let width = screen.width / 10;

@@ -117,13 +117,13 @@ impl File {
     /// * `path` - path to the new file
     /// * `changes` - map of changes
     pub fn write_to(&mut self, path: String) -> io::Result<()> {
-        // reopen file with the write permission
+        // create new file
         let path = File::abs_path(&path);
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(path.clone())?;
+            .open(&path)?;
 
         let mut offset = 0;
         loop {
@@ -229,6 +229,111 @@ impl File {
         None
     }
 
+    /// Insert bytes at the specified position in the file.
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - start position of bytes to insert
+    /// * `length` - number of bytes to insert
+    /// * `pattern` - pattern to fill the added range
+    /// * `progress` - progress handler
+    pub fn insert(
+        &mut self,
+        offset: u64,
+        length: u64,
+        pattern: &[u8],
+        _progress: &mut dyn ProgressHandler,
+    ) -> io::Result<()> {
+        debug_assert!(self.changes.is_empty());
+        debug_assert!(offset <= self.size);
+        debug_assert!(length > 0);
+
+        // reopen file with the write permission
+        let mut file = OpenOptions::new().read(true).write(true).open(&self.path)?;
+
+        // extend the file
+        file.set_len(self.size + length)?;
+
+        // move (copy) data to the end of file
+        let mut back_offset = self.size;
+        let mut buffer = vec![0; 1024];
+        loop {
+            // update progress info
+            //let percent =
+            //    100.0 / (self.size - buffer.len() as u64) as f32 * (offset - range.start) as f32;
+            //if !progress.update(percent as u8) {
+            //    return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
+            //}
+
+            // calculate size and position of the next block
+            let mut size = buffer.len();
+            if back_offset < size as u64 {
+                size = back_offset as usize;
+            }
+            if back_offset < offset + length {
+                break;
+            }
+            if back_offset - (size as u64) < offset + length {
+                size = (back_offset - offset) as usize;
+            }
+            let read_offset = back_offset - size as u64;
+            let write_offset = read_offset + length;
+
+            // read data
+            file.seek(SeekFrom::Start(read_offset))?;
+            file.read_exact(&mut buffer[..size])?;
+
+            // write data
+            file.seek(SeekFrom::Start(write_offset))?;
+            file.write_all(&buffer[..size])?;
+
+            back_offset -= size as u64;
+        }
+
+        // fill with pattern
+        let max_offset = offset + length;
+        let mut fill_offset = offset;
+        let mut pattern_pos = 0;
+        while fill_offset < max_offset {
+            // update progress info
+            //let percent =
+            //    100.0 / (self.size - buffer.len() as u64) as f32 * (offset - range.start) as f32;
+            //if !progress.update(percent as u8) {
+            //    return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
+            //}
+
+            // calculate size of the next block
+            let mut size = buffer.len();
+            if fill_offset + (size as u64) > max_offset {
+                size = (max_offset - fill_offset) as usize;
+            }
+
+            // apply pattern
+            for i in 0..size {
+                buffer[i] = pattern[pattern_pos];
+                pattern_pos += 1;
+                if pattern_pos == pattern.len() {
+                    pattern_pos = 0;
+                }
+            }
+
+            // write data
+            file.seek(SeekFrom::Start(fill_offset))?;
+            file.write_all(&buffer[..size])?;
+
+            fill_offset += size as u64;
+        }
+
+        file.sync_all()?;
+
+        self.size += length;
+
+        // reset cache
+        self.cache.data.clear();
+
+        Ok(())
+    }
+
     /// Cut out the specified range from the file.
     ///
     /// # Arguments
@@ -244,12 +349,7 @@ impl File {
         debug_assert!(!range.is_empty());
 
         // reopen file with the write permission
-        let path = File::abs_path(&self.path);
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)?;
+        let mut file = OpenOptions::new().read(true).write(true).open(&self.path)?;
 
         let range_len = range.end - range.start;
         let mut offset = range.start;
@@ -280,6 +380,7 @@ impl File {
 
         // truncate the file
         file.set_len(self.size)?;
+        file.sync_all()?;
 
         // reset cache
         self.cache.data.clear();

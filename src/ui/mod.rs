@@ -5,6 +5,7 @@ pub mod cut;
 pub mod dialog;
 pub mod fill;
 pub mod goto;
+pub mod insert;
 pub mod messagebox;
 pub mod progress;
 pub mod range;
