@@ -39,10 +39,9 @@ impl CutDlg {
         // warning message
         dlg.add_separator();
         let msg_title = "WARNING!";
+        dlg.add_center(msg_title.len(), Text::new(msg_title));
         let msg_text = "This operation cannot be undone!";
-        dlg.add_center(dlg.last_line, msg_title.len(), Text::new(msg_title));
-        dlg.last_line += 1;
-        dlg.add_center(dlg.last_line, msg_text.len(), Text::new(msg_text));
+        dlg.add_center(msg_text.len(), Text::new(msg_text));
 
         // buttons
         let btn_ok = dlg.add_button(Button::std(StdButton::Ok, true));

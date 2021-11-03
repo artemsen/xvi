@@ -71,8 +71,7 @@ impl MessageBox {
         for (text, center) in self.message.iter().skip(1) {
             let widget = Text::new(text);
             if *center {
-                dlg.add_center(dlg.last_line, text.len(), widget);
-                dlg.last_line += 1;
+                dlg.add_center(text.len(), widget);
             } else {
                 dlg.add_next(widget);
             }

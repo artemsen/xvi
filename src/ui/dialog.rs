@@ -90,6 +90,19 @@ impl Dialog {
         self.add(wnd, widget)
     }
 
+    /// Construct dialog: add one lined item to the next row at the center.
+    pub fn add_center(&mut self, width: usize, widget: Box<dyn Widget>) -> ItemId {
+        let center = (self.wnd.width - (Dialog::MARGIN_X * 2)) / 2;
+        let wnd = Window {
+            x: center - width / 2,
+            y: self.last_line,
+            width,
+            height: 1,
+        };
+        self.last_line += 1;
+        self.add(wnd, widget)
+    }
+
     /// Construct dialog: add horizontal separator to the next row.
     pub fn add_separator(&mut self) {
         let wnd = Window {
@@ -102,8 +115,10 @@ impl Dialog {
         self.add(wnd, Separator::new(None));
     }
 
-    /// Construct dialog: add centered item.
-    pub fn add_center(&mut self, y: usize, width: usize, widget: Box<dyn Widget>) -> ItemId {
+    /// Construct dialog: add button to the main block (Ok, Cancel, etc).
+    pub fn add_button(&mut self, button: Box<Button>) -> ItemId {
+        let y = self.wnd.height - (Dialog::MARGIN_Y + Dialog::PADDING_Y) * 2;
+        let width = button.text.len();
         let center = (self.wnd.width - (Dialog::MARGIN_X * 2)) / 2;
         let x = if !self.items.iter().any(|i| i.wnd.y == y) {
             center - width / 2
@@ -121,20 +136,13 @@ impl Dialog {
             }
             x
         };
-
         let wnd = Window {
             x,
             y,
             width,
             height: 1,
         };
-        self.add(wnd, widget)
-    }
-
-    /// Construct dialog: add button to the main block (Ok, Cancel, etc).
-    pub fn add_button(&mut self, button: Box<Button>) -> ItemId {
-        let y = self.wnd.height - (Dialog::MARGIN_Y + Dialog::PADDING_Y) * 2;
-        self.add_center(y, button.text.len(), button)
+        self.add(wnd, button)
     }
 
     /// Get item's data.
