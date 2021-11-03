@@ -90,9 +90,12 @@ impl DialogHandler for FillDlg {
 
     fn on_focus_lost(&mut self, dialog: &mut Dialog, item: ItemId) {
         if item == self.pattern {
-            if let WidgetData::Text(value) = dialog.get(self.pattern) {
+            if let WidgetData::Text(mut value) = dialog.get(self.pattern) {
                 if value.is_empty() {
                     dialog.set(self.pattern, WidgetData::Text("00".to_string()));
+                } else if value.len() % 2 != 0 {
+                    value.push('0');
+                    dialog.set(self.pattern, WidgetData::Text(value));
                 }
             }
         } else {
