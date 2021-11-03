@@ -20,14 +20,6 @@ pub struct ChangeList {
 }
 
 impl ChangeList {
-    /// Create new change list instance.
-    pub fn new() -> Self {
-        Self {
-            changes: Vec::with_capacity(64),
-            index: 0,
-        }
-    }
-
     /// Make change: set new value for the byte at specified position.
     ///
     /// # Arguments
@@ -103,9 +95,18 @@ impl ChangeList {
     }
 }
 
+impl Default for ChangeList {
+    fn default() -> Self {
+        Self {
+            changes: Vec::with_capacity(64),
+            index: 0,
+        }
+    }
+}
+
 #[test]
 fn test_changesqueue() {
-    let mut ch = ChangeList::new();
+    let mut ch = ChangeList::default();
 
     ch.set(0x1234, 1, 2);
     ch.set(0x1235, 3, 4);

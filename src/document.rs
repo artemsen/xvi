@@ -29,10 +29,18 @@ impl Document {
 
         Ok(Self {
             file,
-            changes: ChangeList::new(),
-            cursor: Cursor::new(),
+            changes: ChangeList::default(),
+            cursor: Cursor::default(),
             view: View::new(config, file_size),
         })
+    }
+
+    /// File change handler.
+    pub fn on_file_changed(&mut self, offset: u64) {
+        self.view.max_offset = self.file.size;
+        if !self.move_cursor(&Direction::Absolute(offset)) {
+            self.update();
+        }
     }
 
     /// Write changes to the file.
@@ -49,7 +57,7 @@ impl Document {
 
     /// Save current file with the new name.
     pub fn save_as(&mut self, path: String) -> io::Result<()> {
-        self.file.write_copy(path)?;
+        self.file.write_to(path)?;
 
         // reset undo/redo buffer
         self.changes.reset();
@@ -57,78 +65,6 @@ impl Document {
         self.update();
 
         Ok(())
-    }
-
-    /// Find sequence inside the current file from the current position.
-    pub fn find(
-        &mut self,
-        sequence: &[u8],
-        backward: bool,
-        progress: &mut dyn ProgressHandler,
-    ) -> Option<u64> {
-        let mut handled = 0;
-
-        let step = 1024;
-        let size = step + sequence.len() as i64;
-        let mut offset = self.cursor.offset as i64;
-
-        if backward {
-            offset -= 1;
-        } else {
-            offset += 1;
-        }
-
-        let mut round = false;
-
-        loop {
-            // update progress info
-            handled += step as u64;
-            let percent = 100.0 / (self.file.size as f32) * handled as f32;
-            if !progress.update(percent as u8) {
-                return None; // aborted by user
-            }
-
-            if !backward {
-                // forward search
-                if offset as u64 >= self.file.size {
-                    offset = 0;
-                    round = true;
-                }
-            } else {
-                // backward search
-                if round && (offset as u64) < self.cursor.offset {
-                    break;
-                }
-                offset -= size;
-                if offset < 0 {
-                    if self.file.size < size as u64 {
-                        offset = 0;
-                    } else {
-                        offset = self.file.size as i64 - size;
-                    }
-                    round = true;
-                }
-            }
-
-            let file_data = self.file.read(offset as u64, size as usize).unwrap();
-            let mut window = file_data.windows(sequence.len());
-            if !backward {
-                if let Some(pos) = window.position(|wnd| wnd == sequence) {
-                    return Some(offset as u64 + pos as u64);
-                }
-            } else if let Some(pos) = window.rposition(|wnd| wnd == sequence) {
-                return Some(offset as u64 + pos as u64);
-            }
-
-            if !backward {
-                offset += step;
-                if round && offset as u64 >= self.cursor.offset {
-                    break;
-                }
-            }
-        }
-
-        None
     }
 
     /// Move cursor.
@@ -179,7 +115,7 @@ impl Document {
         }
     }
 
-    /// Resize view and page.
+    /// Resize view.
     ///
     /// # Arguments
     ///
@@ -212,9 +148,4 @@ impl Document {
             .cloned()
             .collect();
     }
-}
-
-/// Progress handler interface for long time operations.
-pub trait ProgressHandler {
-    fn update(&mut self, percent: u8) -> bool;
 }

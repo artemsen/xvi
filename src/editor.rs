@@ -6,6 +6,7 @@ use super::curses::*;
 use super::cursor::*;
 use super::document::Document;
 use super::history::*;
+use super::ui::cut::CutDlg;
 use super::ui::dialog::*;
 use super::ui::fill::FillDlg;
 use super::ui::goto::GotoDlg;
@@ -29,10 +30,11 @@ pub struct Editor {
     goto_dlg: GotoDlg,
     /// Search configuration dialog.
     search_dlg: SearchDlg,
-    /// Fill range configuration dialog.
-    fill_dlg: FillDlg,
     /// View mode setup dialog.
     setup_dlg: SetupDlg,
+
+    /// Last pattern used in fill/insert operations.
+    pattern: Vec<u8>,
 }
 
 impl Editor {
@@ -56,11 +58,11 @@ impl Editor {
             current: 0,
             goto_dlg: GotoDlg::default(),
             search_dlg: SearchDlg::default(),
-            fill_dlg: FillDlg::default(),
             setup_dlg: SetupDlg {
                 fixed_width: config.fixed_width,
                 ascii_table: config.ascii_table,
             },
+            pattern: vec![0],
         };
         instance.goto_dlg.history = history.get_goto();
         instance.search_dlg.history = history.get_search();
@@ -139,6 +141,10 @@ impl Editor {
             }
             Key::F(6) => {
                 self.fill();
+                true
+            }
+            Key::F(8) => {
+                self.cut();
                 true
             }
             Key::F(9) => {
@@ -508,10 +514,8 @@ impl Editor {
 
     /// Goto to specified address.
     fn goto(&mut self) {
-        if let Some(offset) = self
-            .goto_dlg
-            .show(self.documents[self.current].cursor.offset)
-        {
+        let pos = self.documents[self.current].cursor.offset;
+        if let Some(offset) = self.goto_dlg.show(pos) {
             self.move_cursor(&Direction::Absolute(offset));
         }
     }
@@ -528,8 +532,10 @@ impl Editor {
     fn find_next(&mut self, backward: bool) {
         if let Some(sequence) = self.search_dlg.get_sequence() {
             let mut progress = ProgressDlg::new("Searching...");
+            let doc = &mut self.documents[self.current];
             if let Some(offset) =
-                self.documents[self.current].find(&sequence, backward, &mut progress)
+                doc.file
+                    .find(doc.cursor.offset, &sequence, backward, &mut progress)
             {
                 self.move_cursor(&Direction::Absolute(offset));
             } else if !progress.canceled {
@@ -548,9 +554,11 @@ impl Editor {
     /// Fill range.
     fn fill(&mut self) {
         let doc = &mut self.documents[self.current];
-        if let Some((range, pattern)) = self.fill_dlg.show(doc.cursor.offset) {
+        if let Some((range, pattern)) =
+            FillDlg::show(doc.cursor.offset, doc.file.size, &self.pattern)
+        {
             let mut pattern_pos = 0;
-            for offset in range.start..range.end.min(doc.file.size) {
+            for offset in range.start..range.end {
                 doc.modify_at(offset, pattern[pattern_pos]);
                 pattern_pos += 1;
                 if pattern_pos == pattern.len() {
@@ -558,7 +566,25 @@ impl Editor {
                 }
             }
             doc.update();
+            self.pattern = pattern;
             self.move_cursor(&Direction::Absolute(range.end));
+        }
+    }
+
+    /// Cut out range.
+    fn cut(&mut self) {
+        let doc = &mut self.documents[self.current];
+        if let Some(range) = CutDlg::show(doc.cursor.offset, doc.file.size) {
+            let mut progress = ProgressDlg::new("Write file...");
+            if let Err(err) = doc.file.cut(&range, &mut progress) {
+                MessageBox::new("Error", DialogType::Error)
+                    .center("Error writing file")
+                    .center(&doc.file.path)
+                    .center(&format!("{}", err))
+                    .button(StdButton::Cancel, true)
+                    .show();
+            }
+            doc.on_file_changed(range.end);
         }
     }
 
@@ -620,7 +646,7 @@ impl Editor {
             "Find",  // F5
             "Fill",  // F6
             "",      // F7
-            "",      // F8
+            "Cut",   // F8
             "Setup", // F9
             "Exit",  // F10
         ];

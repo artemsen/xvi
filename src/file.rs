@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::ops::Range;
 use std::path::PathBuf;
 
 /// Editable file.
@@ -109,13 +110,13 @@ impl File {
         Ok(())
     }
 
-    /// Copy current file and write changes to it.
+    /// Create copy of the file and write the current changes to it (save as).
     ///
     /// # Arguments
     ///
     /// * `path` - path to the new file
     /// * `changes` - map of changes
-    pub fn write_copy(&mut self, path: String) -> io::Result<()> {
+    pub fn write_to(&mut self, path: String) -> io::Result<()> {
         // reopen file with the write permission
         let path = File::abs_path(&path);
         let mut file = OpenOptions::new()
@@ -126,7 +127,7 @@ impl File {
 
         let mut offset = 0;
         loop {
-            let data = self.read(offset, 512)?;
+            let data = self.read(offset, 1024)?;
             file.write_all(&data)?;
             offset += data.len() as u64;
             if offset >= self.size {
@@ -140,6 +141,148 @@ impl File {
         // reset
         self.cache.data.clear();
         self.changes.clear();
+
+        Ok(())
+    }
+
+    /// Find sequence inside the current file from the specified position.
+    ///
+    /// # Arguments
+    ///
+    /// * `start` - start address
+    /// * `sequence` - sequence to find
+    /// * `backward` - search direction
+    /// * `progress` - progress handler
+    ///
+    /// # Return value
+    ///
+    /// Offset of the next sequence entry.
+    pub fn find(
+        &mut self,
+        start: u64,
+        sequence: &[u8],
+        backward: bool,
+        progress: &mut dyn ProgressHandler,
+    ) -> Option<u64> {
+        let mut handled = 0;
+
+        let step = 1024;
+        let size = step + sequence.len() as i64;
+        let mut offset = start as i64;
+
+        if backward {
+            offset -= 1;
+        } else {
+            offset += 1;
+        }
+
+        let mut round = false;
+
+        loop {
+            // update progress info
+            handled += step as u64;
+            let percent = 100.0 / (self.size as f32) * handled as f32;
+            if !progress.update(percent as u8) {
+                return None; // aborted by user
+            }
+
+            if !backward {
+                // forward search
+                if offset as u64 >= self.size {
+                    offset = 0;
+                    round = true;
+                }
+            } else {
+                // backward search
+                if round && (offset as u64) < start {
+                    break;
+                }
+                offset -= size;
+                if offset < 0 {
+                    if self.size < size as u64 {
+                        offset = 0;
+                    } else {
+                        offset = self.size as i64 - size;
+                    }
+                    round = true;
+                }
+            }
+
+            let file_data = self.read(offset as u64, size as usize).unwrap();
+            let mut window = file_data.windows(sequence.len());
+            if !backward {
+                if let Some(pos) = window.position(|wnd| wnd == sequence) {
+                    return Some(offset as u64 + pos as u64);
+                }
+            } else if let Some(pos) = window.rposition(|wnd| wnd == sequence) {
+                return Some(offset as u64 + pos as u64);
+            }
+
+            if !backward {
+                offset += step;
+                if round && offset as u64 >= start {
+                    break;
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Cut out the specified range from the file.
+    ///
+    /// # Arguments
+    ///
+    /// * `range` - range to cut out
+    /// * `progress` - progress handler
+    pub fn cut(
+        &mut self,
+        range: &Range<u64>,
+        progress: &mut dyn ProgressHandler,
+    ) -> io::Result<()> {
+        debug_assert!(self.changes.is_empty());
+        debug_assert!(!range.is_empty());
+
+        // reopen file with the write permission
+        let path = File::abs_path(&self.path);
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)?;
+
+        let range_len = range.end - range.start;
+        let mut offset = range.start;
+        let mut buffer = vec![0; 1024];
+        loop {
+            // update progress info
+            let percent =
+                100.0 / (self.size - buffer.len() as u64) as f32 * (offset - range.start) as f32;
+            if !progress.update(percent as u8) {
+                return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
+            }
+
+            // read data
+            file.seek(SeekFrom::Start(offset + range_len))?;
+            let size = file.read(&mut buffer)?;
+            if size == 0 {
+                break; //end of file
+            }
+
+            // write data
+            file.seek(SeekFrom::Start(offset))?;
+            file.write_all(&buffer[..size])?;
+
+            offset += size as u64;
+        }
+
+        self.size -= range_len;
+
+        // truncate the file
+        file.set_len(self.size)?;
+
+        // reset cache
+        self.cache.data.clear();
 
         Ok(())
     }
@@ -190,4 +333,9 @@ impl Cache {
     fn has(&self, offset: u64, size: usize) -> bool {
         offset >= self.start && offset + (size as u64) < self.start + self.data.len() as u64
     }
+}
+
+/// Progress handler interface for long time operations.
+pub trait ProgressHandler {
+    fn update(&mut self, percent: u8) -> bool;
 }

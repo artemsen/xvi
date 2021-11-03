@@ -2,7 +2,7 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::super::curses::{Curses, Event, Key};
-use super::super::document::ProgressHandler;
+use super::super::file::ProgressHandler;
 use super::dialog::*;
 use super::widget::*;
 

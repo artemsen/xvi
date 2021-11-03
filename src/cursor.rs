@@ -16,15 +16,6 @@ pub struct Cursor {
 impl Cursor {
     const WORD_SIZE: u64 = 4;
 
-    /// Create new cursor instance.
-    pub fn new() -> Self {
-        Self {
-            offset: u64::MAX,
-            half: HalfByte::Left,
-            place: Place::Hex,
-        }
-    }
-
     /// Set current place (ascii/hex).
     pub fn set_place(&mut self, place: Place) {
         self.place = place;
@@ -235,6 +226,16 @@ impl Cursor {
         };
 
         new_base - new_base % view.columns as u64
+    }
+}
+
+impl Default for Cursor {
+    fn default() -> Self {
+        Self {
+            offset: u64::MAX,
+            half: HalfByte::Left,
+            place: Place::Hex,
+        }
     }
 }
 
