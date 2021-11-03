@@ -11,9 +11,9 @@ pub struct RangeControl {
     // Max possible value.
     max: u64,
     // Items of the dialog.
-    item_start: ItemId,
-    item_end: ItemId,
-    item_length: ItemId,
+    start: ItemId,
+    end: ItemId,
+    length: ItemId,
 }
 
 impl RangeControl {
@@ -38,7 +38,7 @@ impl RangeControl {
             format!("{:x}", default.start),
             EditFormat::HexUnsigned,
         );
-        let item_start = dialog.add(wnd, widget);
+        let start = dialog.add(wnd, widget);
 
         // end offset widget
         let wnd = Window {
@@ -52,7 +52,7 @@ impl RangeControl {
             format!("{:x}", default.end - 1),
             EditFormat::HexUnsigned,
         );
-        let item_end = dialog.add(wnd, widget);
+        let end = dialog.add(wnd, widget);
 
         dialog.add_next(Text::new("Length:       └──────         ──────┘"));
 
@@ -68,20 +68,20 @@ impl RangeControl {
             format!("{}", default.end - default.start),
             EditFormat::DecUnsigned,
         );
-        let item_length = dialog.add(wnd, widget);
+        let length = dialog.add(wnd, widget);
 
         Self {
             max,
-            item_start,
-            item_end,
-            item_length,
+            start,
+            end,
+            length,
         }
     }
 
     /// Get range specified in the control fields.
     pub fn get(&self, dialog: &Dialog) -> Option<Range<u64>> {
-        let start = self.get_offset(dialog, self.item_start);
-        let end = self.get_offset(dialog, self.item_end);
+        let start = self.get_offset(dialog, self.start);
+        let end = self.get_offset(dialog, self.end);
         if start <= end && start < self.max {
             Some(start..end + 1)
         } else {
@@ -104,36 +104,36 @@ impl RangeControl {
 
 impl DialogHandler for RangeControl {
     fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
-        if item == self.item_start || item == self.item_end {
-            let start = self.get_offset(dialog, self.item_start);
-            let end = self.get_offset(dialog, self.item_end);
+        if item == self.start || item == self.end {
+            let start = self.get_offset(dialog, self.start);
+            let end = self.get_offset(dialog, self.end);
             let length = if start > end { 0 } else { end - start + 1 };
-            dialog.set(self.item_length, WidgetData::Text(format!("{}", length)));
-        } else if item == self.item_length {
+            dialog.set(self.length, WidgetData::Text(format!("{}", length)));
+        } else if item == self.length {
             let mut length = 1;
-            if let WidgetData::Text(value) = dialog.get(self.item_length) {
+            if let WidgetData::Text(value) = dialog.get(self.length) {
                 length = value.parse::<u64>().unwrap_or(0);
                 if length == 0 {
                     length = 1;
                 }
             }
-            let mut end = self.get_offset(dialog, self.item_start) + length - 1;
+            let mut end = self.get_offset(dialog, self.start) + length - 1;
             if end >= self.max {
                 end = self.max - 1;
             }
-            dialog.set(self.item_end, WidgetData::Text(format!("{:x}", end)));
+            dialog.set(self.end, WidgetData::Text(format!("{:x}", end)));
         }
     }
 
     fn on_focus_lost(&mut self, dialog: &mut Dialog, item: ItemId) {
-        if item == self.item_start || item == self.item_end {
+        if item == self.start || item == self.end {
             let offset = self.get_offset(dialog, item);
             dialog.set(item, WidgetData::Text(format!("{:x}", offset)));
-        } else if item == self.item_length {
-            let start = self.get_offset(dialog, self.item_start);
-            let end = self.get_offset(dialog, self.item_end);
+        } else if item == self.length {
+            let start = self.get_offset(dialog, self.start);
+            let end = self.get_offset(dialog, self.end);
             let length = if start > end { 0 } else { end - start + 1 };
-            dialog.set(self.item_length, WidgetData::Text(format!("{}", length)));
+            dialog.set(self.length, WidgetData::Text(format!("{}", length)));
         }
     }
 }
