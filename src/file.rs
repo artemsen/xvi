@@ -242,7 +242,7 @@ impl File {
         offset: u64,
         length: u64,
         pattern: &[u8],
-        _progress: &mut dyn ProgressHandler,
+        progress: &mut dyn ProgressHandler,
     ) -> io::Result<()> {
         debug_assert!(self.changes.is_empty());
         debug_assert!(offset <= self.size);
@@ -254,16 +254,19 @@ impl File {
         // extend the file
         file.set_len(self.size + length)?;
 
+        // progress
+        let byte_wight = 100.0 / (self.size - offset + length) as f32;
+        let mut bytes_handled = 0;
+
         // move (copy) data to the end of file
         let mut back_offset = self.size;
         let mut buffer = vec![0; 1024];
         loop {
             // update progress info
-            //let percent =
-            //    100.0 / (self.size - buffer.len() as u64) as f32 * (offset - range.start) as f32;
-            //if !progress.update(percent as u8) {
-            //    return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
-            //}
+            let percent = byte_wight * bytes_handled as f32;
+            if !progress.update(percent as u8) {
+                return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
+            }
 
             // calculate size and position of the next block
             let mut size = buffer.len();
@@ -288,6 +291,7 @@ impl File {
             file.write_all(&buffer[..size])?;
 
             back_offset -= size as u64;
+            bytes_handled += size as u64;
         }
 
         // fill with pattern
@@ -296,11 +300,10 @@ impl File {
         let mut pattern_pos = 0;
         while fill_offset < max_offset {
             // update progress info
-            //let percent =
-            //    100.0 / (self.size - buffer.len() as u64) as f32 * (offset - range.start) as f32;
-            //if !progress.update(percent as u8) {
-            //    return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
-            //}
+            let percent = byte_wight * bytes_handled as f32;
+            if !progress.update(percent as u8) {
+                return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
+            }
 
             // calculate size of the next block
             let mut size = buffer.len();
@@ -309,8 +312,8 @@ impl File {
             }
 
             // apply pattern
-            for i in 0..size {
-                buffer[i] = pattern[pattern_pos];
+            for byte in buffer.iter_mut().take(size) {
+                *byte = pattern[pattern_pos];
                 pattern_pos += 1;
                 if pattern_pos == pattern.len() {
                     pattern_pos = 0;
@@ -322,6 +325,7 @@ impl File {
             file.write_all(&buffer[..size])?;
 
             fill_offset += size as u64;
+            bytes_handled += size as u64;
         }
 
         file.sync_all()?;
