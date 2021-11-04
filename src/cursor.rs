@@ -32,6 +32,7 @@ impl Cursor {
     /// # Return value
     ///
     /// New page offset.
+    #[allow(clippy::too_many_lines)]
     pub fn move_to(&mut self, dir: &Direction, view: &View) -> u64 {
         let page_size = (view.lines * view.columns) as u64;
         let mut new_base = view.offset;

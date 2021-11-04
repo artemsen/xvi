@@ -2,8 +2,8 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::config::Config;
-use super::curses::*;
-use super::cursor::*;
+use super::curses::{Color, Curses, Event, Key, KeyPress, Window};
+use super::cursor::{Direction, HalfByte, Place};
 use super::document::Document;
 use super::history::History;
 use super::ui::cut::CutDlg;
@@ -74,7 +74,7 @@ impl Editor {
         if let Some(offset) = offset {
             initial_offset = offset;
         } else {
-            for doc in instance.documents.iter() {
+            for doc in &instance.documents {
                 if let Some(offset) = history.get_filepos(&doc.file.path) {
                     initial_offset = offset;
                     break;
@@ -104,18 +104,23 @@ impl Editor {
                         }
                     }
                     _ => {
-                        self.handle_key(key);
+                        self.handle_key(&key);
                     }
                 },
             }
         }
     }
 
-    /// External event handler, called on key press.
-    fn handle_key(&mut self, key: KeyPress) {
+    /// Keyboard input handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - pressed key
+    #[allow(clippy::too_many_lines)]
+    fn handle_key(&mut self, key: &KeyPress) {
         let handled = match key.key {
             Key::F(1) => {
-                self.help();
+                Editor::help();
                 true
             }
             Key::F(2) => {
@@ -286,15 +291,7 @@ impl Editor {
                     false
                 }
             }
-            Key::Char('r') => {
-                if key.modifier == KeyPress::CTRL {
-                    self.documents[self.current].redo();
-                    true
-                } else {
-                    false
-                }
-            }
-            Key::Char('y') => {
+            Key::Char('r' | 'y') => {
                 if key.modifier == KeyPress::CTRL {
                     self.documents[self.current].redo();
                     true
@@ -352,7 +349,7 @@ impl Editor {
                 Key::Char('k') => {
                     self.move_cursor(&Direction::LineDown);
                 }
-                Key::Char('a'..='f') | Key::Char('A'..='F') | Key::Char('0'..='9') => {
+                Key::Char('a'..='f' | 'A'..='F' | '0'..='9') => {
                     if key.modifier == KeyPress::NONE {
                         if let Key::Char(chr) = key.key {
                             let half = match chr {
@@ -436,7 +433,7 @@ impl Editor {
     }
 
     /// Show mini help.
-    fn help(&self) {
+    fn help() {
         MessageBox::new("XVI: Hex editor", DialogType::Normal)
             .left("Arrows, PgUp, PgDown: move cursor;")
             .left("Tab: switch between Hex/ASCII;")
@@ -482,7 +479,7 @@ impl Editor {
         if let Some(new_name) = SaveAsDlg::default().show(doc.file.path.clone()) {
             loop {
                 //todo: let mut progress = ProgressDlg::new("Save as...");
-                match doc.save_as(new_name.clone()) {
+                match doc.save_as(&new_name) {
                     Ok(()) => {
                         return true;
                     }
@@ -631,7 +628,7 @@ impl Editor {
     /// Setup via GUI.
     fn setup(&mut self) {
         if self.setup_dlg.show() {
-            for doc in self.documents.iter_mut() {
+            for doc in &mut self.documents {
                 doc.view.fixed_width = self.setup_dlg.fixed_width;
                 doc.view.ascii_table = self.setup_dlg.ascii_table;
                 if doc.view.ascii_table.is_none() {
@@ -644,7 +641,7 @@ impl Editor {
 
     /// Exit from editor.
     fn exit(&mut self) -> bool {
-        for doc in self.documents.iter_mut() {
+        for doc in &mut self.documents {
             if !doc.file.is_modified() {
                 continue;
             }
@@ -706,7 +703,7 @@ impl Editor {
         ];
         let mut fn_line = String::new();
         let width = screen.width / 10;
-        for i in 0..10 {
+        for i in 0_usize..10 {
             fn_line += &format!(
                 "{:>2}{:<width$}",
                 i + 1,
@@ -746,11 +743,10 @@ impl Editor {
                 x: screen.x,
                 y: index * height,
                 width: screen.width,
-                height: if index != last_index {
-                    height
+                height: if index == last_index {
+                    screen.height - height * last_index //enlarge last window to fit the screen
                 } else {
-                    // enlarge last window to fit the screen
-                    screen.height - height * last_index
+                    height
                 },
             };
 

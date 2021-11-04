@@ -56,7 +56,7 @@ impl ChangeList {
             real.insert(change.offset, change.new);
         }
         // remove changes that restore origin values
-        for (offset, origin) in origins.iter() {
+        for (offset, origin) in &origins {
             if origin == real.get(offset).unwrap() {
                 real.remove(offset);
             }

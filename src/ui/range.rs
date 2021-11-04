@@ -2,8 +2,8 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::super::curses::Window;
-use super::dialog::*;
-use super::widget::*;
+use super::dialog::{Dialog, DialogHandler, ItemId};
+use super::widget::{Edit, EditFormat, Text, WidgetData};
 use std::ops::Range;
 
 /// Range control: set of widgets and handlers.
@@ -24,7 +24,7 @@ impl RangeControl {
         debug_assert!(default.end <= max);
 
         dialog.add_next(Text::new("            Start                  End"));
-        dialog.add_next(Text::new("Range:               ─────────"));
+        dialog.add_next(Text::new("Range:               \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}"));
 
         // start offset widget
         let wnd = Window {
@@ -54,7 +54,7 @@ impl RangeControl {
         );
         let end = dialog.add(wnd, widget);
 
-        dialog.add_next(Text::new("Length:       └──────         ──────┘"));
+        dialog.add_next(Text::new("Length:       \u{2514}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}         \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2518}"));
 
         // range length widget
         let wnd = Window {

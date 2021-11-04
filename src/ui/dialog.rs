@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::super::curses::*;
+use super::super::curses::{Color, Curses, Event, Key, KeyPress, Window};
 use super::widget::{Border, Button, Separator, Widget, WidgetData};
 
 /// Dialog window.
@@ -30,6 +30,11 @@ impl Dialog {
         let screen = Curses::get_screen();
         let dlg_width = width + Dialog::MARGIN_X * 2;
         let dlg_height = height + Dialog::MARGIN_Y * 2;
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let wnd = Window {
             x: screen.width / 2 - dlg_width / 2,
             y: (screen.height as f32 / 2.5) as usize - dlg_height / 2,
@@ -63,7 +68,7 @@ impl Dialog {
             wnd,
             items: vec![border, separator],
             last_line: Dialog::PADDING_Y,
-            focus: -1,
+            focus: ItemId::MAX,
             dtype: dt,
         }
     }
@@ -120,9 +125,7 @@ impl Dialog {
         let y = self.wnd.height - (Dialog::MARGIN_Y + Dialog::PADDING_Y) * 2;
         let width = button.text.len();
         let center = (self.wnd.width - (Dialog::MARGIN_X * 2)) / 2;
-        let x = if !self.items.iter().any(|i| i.wnd.y == y) {
-            center - width / 2
-        } else {
+        let x = if self.items.iter().any(|i| i.wnd.y == y) {
             // total width of the items on the same line
             let mut total_width = width;
             for item in self.items.iter().filter(|i| i.wnd.y == y) {
@@ -135,6 +138,8 @@ impl Dialog {
                 x += item.wnd.width + 1 /* space */;
             }
             x
+        } else {
+            center - width / 2
         };
         let wnd = Window {
             x,
@@ -168,7 +173,7 @@ impl Dialog {
     /// Run dialog: show window and handle external events.
     pub fn run(&mut self, handler: &mut dyn DialogHandler) -> Option<ItemId> {
         // set focus to the first available widget
-        if self.focus < 0 {
+        if self.focus == ItemId::MAX {
             self.move_focus(true);
         }
 
@@ -195,7 +200,7 @@ impl Dialog {
                             }
                         }
                         _ => {
-                            if self.focus >= 0 {
+                            if self.focus != ItemId::MAX {
                                 if self.items[self.focus as usize].widget.keypress(&event) {
                                     handler.on_item_change(self, self.focus);
                                 } else if event.key == Key::Left || event.key == Key::Up {
@@ -272,20 +277,36 @@ impl Dialog {
     fn move_focus(&mut self, forward: bool) -> ItemId {
         debug_assert!(!self.items.is_empty());
 
-        let mut focus = self.focus;
+        let mut focus = if self.focus == ItemId::MAX {
+            // first launch, focues wasn't set yet
+            self.items.len() as ItemId - 1
+        } else {
+            self.focus
+        };
+
+        let mut lap = false;
+
         loop {
-            focus += if forward { 1 } else { -1 };
-            if focus == self.focus {
-                return -1; // no one focusable items
-            }
-            if focus < 0 {
-                focus = self.items.len() as isize - 1;
-            } else if focus == self.items.len() as isize {
-                if self.focus == -1 {
-                    return -1; // no one focusable items
+            if forward {
+                focus += 1;
+                if focus == self.items.len() as ItemId {
+                    if lap {
+                        return ItemId::MAX; // no one focusable items
+                    }
+                    lap = true;
+                    focus = 0;
                 }
-                focus = 0;
+            } else {
+                if focus == 0 {
+                    if lap {
+                        return ItemId::MAX; // no one focusable items
+                    }
+                    lap = true;
+                    focus = self.items.len() as ItemId;
+                }
+                focus -= 1;
             }
+
             if self.items[focus as usize].enabled && self.items[focus as usize].widget.focusable() {
                 break;
             }
@@ -306,7 +327,7 @@ pub enum DialogType {
 }
 
 /// Type of dialog's item ID.
-pub type ItemId = isize;
+pub type ItemId = usize;
 
 /// Single dialog item.
 pub struct DialogItem {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::dialog::*;
+use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
 use super::range::RangeControl;
-use super::widget::*;
+use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
 use std::ops::Range;
 
 /// Dialog for setting "fill" parameters.

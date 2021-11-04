@@ -54,7 +54,7 @@ impl IniFile {
     pub fn save(&self, file: &Path) -> io::Result<()> {
         create_dir_all(file.parent().unwrap())?;
         let mut ini = File::create(file)?;
-        for (name, params) in self.sections.iter() {
+        for (name, params) in &self.sections {
             ini.write_all(format!("[{}]\n", name).as_bytes())?;
             for line in params.iter() {
                 ini.write_all(format!("{}\n", line).as_bytes())?;
@@ -64,15 +64,15 @@ impl IniFile {
     }
 
     /// Set value for specified key in the named section.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn set_keyval(&mut self, section: &str, key: &str, value: &str) {
-        let lkey = key.to_lowercase();
-        let new_line = format!("{} = {}", lkey, value);
+        let lc_key = key.to_lowercase();
+        let new_line = format!("{} = {}", lc_key, value);
         let section = section.to_lowercase();
-        let section = &mut self.sections.entry(section).or_insert_with(Vec::new);
+        let section = self.sections.entry(section).or_insert_with(Vec::new);
         for (index, line) in section.iter().enumerate() {
-            if let Some((ckey, _)) = IniFile::keyval(line) {
-                if ckey == lkey {
+            if let Some((ck_key, _)) = IniFile::keyval(line) {
+                if ck_key == lc_key {
                     section[index] = new_line;
                     return;
                 }

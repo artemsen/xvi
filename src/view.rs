@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::ascii::AsciiTable;
+use super::ascii::Table;
 use super::config::Config;
 use super::curses::{Color, Curses, Window};
 use super::document::Document;
@@ -13,7 +13,7 @@ pub struct View {
     /// Line width mode (fixed/dynamic).
     pub fixed_width: bool,
     /// ASCII characters table (None hides the field).
-    pub ascii_table: Option<&'static AsciiTable>,
+    pub ascii_table: Option<&'static Table>,
 
     /// Max offset (file size).
     pub max_offset: u64,
@@ -157,10 +157,10 @@ impl View {
                 1
             }) as u8;
         if let Some(table) = self.ascii_table {
-            stat = format!(" │ {}", table.id);
+            stat = format!(" \u{2502} {}", table.id);
         };
         stat += &format!(
-            " │ 0x{offset:04x} = 0x{value:02x} {value:<3} 0{value:<3o} {value:08b} │ {percent:>3}%",
+            " \u{2502} 0x{offset:04x} = 0x{value:02x} {value:<3} 0{value:<3o} {value:08b} \u{2502} {percent:>3}%",
             offset = doc.cursor.offset,
             value = value,
             percent = percent
@@ -183,7 +183,7 @@ impl View {
             let (index_end, grapheme_end) = path.grapheme_indices(true).nth(cut_end).unwrap();
             let start = index_start + grapheme_start.len();
             let end = index_end + grapheme_end.len();
-            path.replace_range(start..end, "…");
+            path.replace_range(start..end, "\u{2026}");
         }
 
         // draw status bar
@@ -388,7 +388,7 @@ impl View {
         }
         let y = line + 1 /* status bar */;
 
-        let column = offset as usize % self.columns;
+        let column = (offset % self.columns as u64) as usize;
         let mut x = self.offset_width + View::FIELD_MARGIN;
         if hex {
             x += column * (View::BYTES_IN_WORD - 1) + column / View::BYTES_IN_WORD;

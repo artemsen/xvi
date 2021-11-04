@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::ascii::AsciiTable;
+use super::ascii::Table;
 use super::curses::Color;
 use super::inifile::IniFile;
 use std::env;
@@ -12,7 +12,7 @@ pub struct Config {
     /// Line width mode (fixed/dynamic).
     pub fixed_width: bool,
     /// ASCII table identifier.
-    pub ascii_table: Option<&'static AsciiTable>,
+    pub ascii_table: Option<&'static Table>,
     /// Color scheme.
     pub colors: Vec<(Color, u8, u8)>,
 }
@@ -25,7 +25,7 @@ impl Default for Config {
         }
         Self {
             fixed_width: false,
-            ascii_table: Some(AsciiTable::default()),
+            ascii_table: Some(Table::default()),
             colors,
         }
     }
@@ -56,17 +56,13 @@ impl Config {
                 if val == "none" {
                     instance.ascii_table = None;
                 } else {
-                    instance.ascii_table = AsciiTable::from_id(&val);
+                    instance.ascii_table = Table::from_id(&val);
                 }
             }
             if let Some(val) = ini.get_strval(Config::COLORS, "Theme") {
-                match val.to_lowercase().as_str() {
-                    "light" => {
-                        instance.colors = Vec::from(Config::LIGHT_THEME);
-                    }
-                    "dark" => { /* already set by default */ }
-                    _ => {}
-                };
+                if val.to_lowercase().as_str() == "light" {
+                    instance.colors = Vec::from(Config::LIGHT_THEME);
+                }
             }
             if let Some(section) = ini.sections.get(&Config::COLORS.to_lowercase()) {
                 instance.parse_colors(section);

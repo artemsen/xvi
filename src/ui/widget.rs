@@ -85,16 +85,16 @@ impl Border {
 impl Widget for Border {
     fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
         // top
-        let border = format!("╔{:═^1$}╗", &self.title, wnd.width - 2);
+        let border = format!("\u{2554}{:\u{2550}^1$}\u{2557}", &self.title, wnd.width - 2);
         wnd.print(0, 0, &border);
         // bottom
-        let line = (0..wnd.width - 2).map(|_| "═").collect::<String>();
-        let border = String::from("╚") + &line + "╝";
+        let line = (0..wnd.width - 2).map(|_| "\u{2550}").collect::<String>();
+        let border = String::from("\u{255a}") + &line + "\u{255d}";
         wnd.print(0, wnd.height - 1, &border);
         // left/right
         for y in 1..wnd.height - 1 {
-            wnd.print(0, y, "║");
-            wnd.print(wnd.width - 1, y, "║");
+            wnd.print(0, y, "\u{2551}");
+            wnd.print(wnd.width - 1, y, "\u{2551}");
         }
         None
     }
@@ -119,7 +119,7 @@ impl Separator {
 
 impl Widget for Separator {
     fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
-        let line = format!("╟{:─^1$}╢", &self.title, wnd.width - 2);
+        let line = format!("\u{255f}{:\u{2500}^1$}\u{2562}", &self.title, wnd.width - 2);
         wnd.print(0, 0, &line);
         None
     }
@@ -257,8 +257,8 @@ impl Widget for Listbox {
             self.list[self.current],
             width = wnd.width - 2
         );
-        wnd.print(0, 0, "◄");
-        wnd.print(wnd.width - 1, 0, "►");
+        wnd.print(0, 0, "\u{25c4}");
+        wnd.print(wnd.width - 1, 0, "\u{25ba}");
         wnd.print(1, 0, &text);
         if focused {
             wnd.color(0, 0, wnd.width, Color::ItemFocused);
@@ -321,8 +321,8 @@ impl Widget for ProgressBar {
         let text = format!("{:>3}%", self.percent);
         let bar_len = wnd.width - text.len() - 1;
         let fill = self.percent as usize * bar_len / 100;
-        let mut bar = (0..fill).map(|_| "▓").collect::<String>();
-        bar += &(fill..bar_len).map(|_| "░").collect::<String>();
+        let mut bar = (0..fill).map(|_| "\u{2588}").collect::<String>();
+        bar += &(fill..bar_len).map(|_| "\u{2591}").collect::<String>();
         wnd.print(0, 0, &bar);
         wnd.print(bar_len + 1, 0, &text);
         None
@@ -507,7 +507,7 @@ impl Widget for Edit {
 
         wnd.print(0, 0, substr);
         if !self.history.is_empty() {
-            wnd.print(self.width - 1, 0, "▼");
+            wnd.print(self.width - 1, 0, "\u{25bc}");
         }
         wnd.color(
             0,

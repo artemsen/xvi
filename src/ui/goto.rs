@@ -2,8 +2,8 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::super::curses::Window;
-use super::dialog::*;
-use super::widget::*;
+use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
+use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
 
 /// Dialog for setting "goto" parameters.
 pub struct GotoDlg {
@@ -161,15 +161,19 @@ impl GotoDlg {
                 offset = u64::from_str_radix(&value, 16).unwrap_or(0);
             } else if source == self.item_absdec {
                 offset = value.parse::<u64>().unwrap_or(0);
-            } else if source == self.item_relhex {
-                let relative = i64::from_str_radix(&value, 16).unwrap_or(0);
-                if relative >= 0 || -relative < self.current as i64 {
-                    offset = (self.current as i64 + relative) as u64;
-                }
-            } else if source == self.item_reldec {
-                let relative = value.parse::<i64>().unwrap_or(0);
-                if relative >= 0 || -relative < self.current as i64 {
-                    offset = (self.current as i64 + relative) as u64;
+            } else if source == self.item_relhex || source == self.item_reldec {
+                let relative = if source == self.item_relhex {
+                    i64::from_str_radix(&value, 16).unwrap_or(0)
+                } else {
+                    value.parse::<i64>().unwrap_or(0)
+                };
+                if relative >= 0 || relative.unsigned_abs() < self.current {
+                    offset = self.current;
+                    if relative >= 0 {
+                        offset += relative.unsigned_abs();
+                    } else {
+                        offset -= relative.unsigned_abs();
+                    }
                 }
             } else {
                 unreachable!();
@@ -215,11 +219,11 @@ impl Default for GotoDlg {
         Self {
             history: Vec::new(),
             current: 0,
-            item_abshex: -1,
-            item_absdec: -1,
-            item_relhex: -1,
-            item_reldec: -1,
-            item_cancel: -1,
+            item_abshex: ItemId::MAX,
+            item_absdec: ItemId::MAX,
+            item_relhex: ItemId::MAX,
+            item_reldec: ItemId::MAX,
+            item_cancel: ItemId::MAX,
         }
     }
 }

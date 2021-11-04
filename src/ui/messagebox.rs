@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::dialog::*;
-use super::widget::*;
+use super::dialog::{Dialog, DialogType};
+use super::widget::{Button, StdButton, Text};
 use std::collections::BTreeMap;
 
 /// Message box dialog.
@@ -47,14 +47,14 @@ impl MessageBox {
     pub fn show(&self) -> Option<StdButton> {
         // calculate dialog width
         let mut buttons_width = 0;
-        for (button, default) in self.buttons.iter() {
+        for (button, default) in &self.buttons {
             if buttons_width != 0 {
                 buttons_width += 1; // space between buttons
             }
             buttons_width += Button::std(*button, *default).text.len();
         }
         let mut width = buttons_width;
-        for (line, _) in self.message.iter() {
+        for (line, _) in &self.message {
             if width < line.len() {
                 width = line.len();
             }
@@ -79,7 +79,7 @@ impl MessageBox {
 
         // buttons line
         let mut button_ids = BTreeMap::new();
-        for &(button, default) in self.buttons.iter() {
+        for &(button, default) in &self.buttons {
             let btn = Button::std(button, default);
             let id = dlg.add_button(btn);
             button_ids.insert(id, button);

@@ -22,7 +22,7 @@ impl Curses {
         nc::start_color();
         nc::use_default_colors();
         for &(color, fg, bg) in colors.iter() {
-            nc::init_pair(color as i16, fg as i16, bg as i16);
+            nc::init_pair(color as i16, i16::from(fg), i16::from(bg));
         }
 
         nc::bkgdset(nc::COLOR_PAIR(Color::HexNormal as i16));
@@ -51,6 +51,7 @@ impl Curses {
 
     /// Show cursor at specified position.
     pub fn show_cursor(x: usize, y: usize) {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         nc::mv(y as i32, x as i32);
         nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_VISIBLE);
     }
@@ -63,6 +64,7 @@ impl Curses {
     /// Get main screen winndow.
     pub fn get_screen() -> Window {
         let wnd = nc::stdscr();
+        #[allow(clippy::cast_sign_loss)]
         Window {
             x: 0,
             y: 0,
@@ -178,7 +180,8 @@ impl Curses {
                 if (nc::KEY_F1..nc::KEY_F1 + 64).contains(&code) {
                     let fn_max = 12;
                     let fn_code = code - nc::KEY_F1;
-                    let f = 1 + fn_code % fn_max;
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    let fn_num = 1 + (fn_code % fn_max) as u8;
                     let m = if fn_code >= fn_max * 4 {
                         KeyPress::ALT
                     } else if fn_code >= fn_max * 3 {
@@ -190,7 +193,7 @@ impl Curses {
                     } else {
                         KeyPress::NONE
                     };
-                    return Some(KeyPress::new(Key::F(f as u8), m));
+                    return Some(KeyPress::new(Key::F(fn_num), m));
                 }
                 None
             }
@@ -212,10 +215,9 @@ impl Curses {
                     0x07 => Some(KeyPress::new(Key::Char('g'), KeyPress::CTRL)),
                     0x08 => Some(KeyPress::new(Key::Char('h'), KeyPress::CTRL)),
                     0x09 => Some(KeyPress::new(Key::Tab, KeyPress::NONE)),
-                    0x0a => Some(KeyPress::new(Key::Enter, KeyPress::NONE)),
+                    0x0a | 0x0d => Some(KeyPress::new(Key::Enter, KeyPress::NONE)),
                     0x0b => Some(KeyPress::new(Key::Char('k'), KeyPress::CTRL)),
                     0x0c => Some(KeyPress::new(Key::Char('l'), KeyPress::CTRL)),
-                    0x0d => Some(KeyPress::new(Key::Enter, KeyPress::NONE)),
                     0x0e => Some(KeyPress::new(Key::Char('n'), KeyPress::CTRL)),
                     0x0f => Some(KeyPress::new(Key::Char('o'), KeyPress::CTRL)),
                     0x10 => Some(KeyPress::new(Key::Char('p'), KeyPress::CTRL)),
@@ -337,6 +339,7 @@ impl Window {
     pub fn print(&self, x: usize, y: usize, text: &str) {
         debug_assert!(x <= self.width);
         debug_assert!(y <= self.height);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         nc::mvaddstr((self.y + y) as i32, (self.x + x) as i32, text);
     }
 
@@ -345,6 +348,7 @@ impl Window {
         debug_assert!(x <= self.width);
         debug_assert!(y <= self.height);
         debug_assert!(x + width <= self.width);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         nc::mvchgat(
             (self.y + y) as i32,
             (self.x + x) as i32,

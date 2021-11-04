@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::dialog::*;
-use super::widget::*;
+use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
+use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
 
 /// Dialog for asking a user for new file name ("Save as").
 pub struct SaveAsDlg {
@@ -70,9 +70,9 @@ impl DialogHandler for SaveAsDlg {
 impl Default for SaveAsDlg {
     fn default() -> Self {
         Self {
-            item_path: -1,
-            item_ok: -1,
-            item_cancel: -1,
+            item_path: ItemId::MAX,
+            item_ok: ItemId::MAX,
+            item_cancel: ItemId::MAX,
         }
     }
 }

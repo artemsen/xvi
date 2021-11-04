@@ -75,11 +75,13 @@ impl File {
         debug_assert!(offset < self.size);
 
         // read up to the end of file
-        let size = size.min((self.size - offset) as usize);
+        #[allow(clippy::cast_possible_truncation)]
+        let max_size = (self.size - offset) as usize;
+        let size = size.min(max_size);
 
         // update cache if needed
         if !self.cache.has(offset, size) {
-            let cache_size = Cache::SIZE.min((self.size - offset) as usize);
+            let cache_size = Cache::SIZE.min(max_size);
             self.cache.data.resize(cache_size, 0);
             self.cache.start = offset;
             self.file.seek(SeekFrom::Start(offset))?;
@@ -87,12 +89,14 @@ impl File {
         }
 
         // get file data
+        #[allow(clippy::cast_possible_truncation)]
         let start = (offset - self.cache.start) as usize;
         let end = start + size;
         let mut data = self.cache.data[start..end].to_vec();
 
         // apply changes
         for (&addr, &value) in self.changes.range(offset..offset + size as u64) {
+            #[allow(clippy::cast_possible_truncation)]
             let index = (addr - offset) as usize;
             data[index] = value;
         }
@@ -105,7 +109,7 @@ impl File {
         // reopen file with the write permission
         let mut file = OpenOptions::new().write(true).open(self.path.clone())?;
         // write changes
-        for (&offset, &value) in self.changes.iter() {
+        for (&offset, &value) in &self.changes {
             file.seek(SeekFrom::Start(offset))?;
             file.write_all(&[value])?;
         }
@@ -173,10 +177,12 @@ impl File {
         progress: &mut dyn ProgressHandler,
     ) -> Option<u64> {
         debug_assert!(File::BLOCK_SIZE > sequence.len());
-        let size = File::BLOCK_SIZE;
-        let mut offset = start as i64;
+        let mut offset = start;
 
         if backward {
+            if offset == 0 {
+                offset = self.size;
+            }
             offset -= 1;
         } else {
             offset += 1;
@@ -184,40 +190,44 @@ impl File {
 
         let mut round = false;
 
-        // percent per byte, used for progress calculation
-        let ppb = 100.0 / self.size as f32;
+        // percent per block, used for progress calculation
+        #[allow(clippy::cast_precision_loss)]
+        let ppb = 100.0 / (self.size / File::BLOCK_SIZE as u64) as f64;
         let mut handled = 0;
 
         loop {
             // update progress info
-            let percent = ppb * handled as f32;
+            #[allow(clippy::cast_precision_loss)]
+            let percent = ppb * (handled / File::BLOCK_SIZE as u64) as f64;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             if !progress.update(percent as u8) {
                 return None; // aborted by user
             }
 
-            if !backward {
+            if backward {
+                // backward search
+                if round && offset < start {
+                    break;
+                }
+                if offset >= File::BLOCK_SIZE as u64 {
+                    offset -= File::BLOCK_SIZE as u64;
+                } else {
+                    if self.size < File::BLOCK_SIZE as u64 {
+                        offset = 0;
+                    } else {
+                        offset = self.size - File::BLOCK_SIZE as u64;
+                    }
+                    round = true;
+                }
+            } else {
                 // forward search
                 if offset as u64 >= self.size {
                     offset = 0;
                     round = true;
                 }
-            } else {
-                // backward search
-                if round && (offset as u64) < start {
-                    break;
-                }
-                offset -= size as i64;
-                if offset < 0 {
-                    if self.size < size as u64 {
-                        offset = 0;
-                    } else {
-                        offset = self.size as i64 - size as i64;
-                    }
-                    round = true;
-                }
             }
 
-            let file_data = self.read(offset as u64, size).unwrap();
+            let file_data = self.read(offset as u64, File::BLOCK_SIZE).unwrap();
             let mut window = file_data.windows(sequence.len());
             if !backward {
                 if let Some(pos) = window.position(|wnd| wnd == sequence) {
@@ -228,7 +238,7 @@ impl File {
             }
 
             if !backward {
-                offset += File::BLOCK_SIZE as i64;
+                offset += File::BLOCK_SIZE as u64;
                 if round && offset as u64 >= start {
                     break;
                 }
@@ -265,8 +275,9 @@ impl File {
         // extend the file
         file.set_len(self.size + length)?;
 
-        // percent per byte, used for progress calculation
-        let ppb = 100.0 / (self.size - offset + length) as f32;
+        // percent per block, used for progress calculation
+        #[allow(clippy::cast_precision_loss)]
+        let ppb = 100.0 / ((self.size - offset + length) / File::BLOCK_SIZE as u64) as f64;
         let mut handled = 0;
 
         let mut buffer = vec![0; File::BLOCK_SIZE];
@@ -275,13 +286,16 @@ impl File {
         let mut back_offset = self.size;
         while back_offset > offset {
             // update progress info
-            let percent = ppb * handled as f32;
+            #[allow(clippy::cast_precision_loss)]
+            let percent = ppb * (handled / File::BLOCK_SIZE as u64) as f64;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             if !progress.update(percent as u8) {
                 return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
             }
 
             // calculate size and position of the next block
             let mut size = buffer.len();
+            #[allow(clippy::cast_possible_truncation)]
             if back_offset - (size as u64).min(back_offset) <= offset {
                 size = (back_offset - offset) as usize;
             }
@@ -307,13 +321,16 @@ impl File {
         let mut pattern_pos = 0;
         while fill_offset < max_offset {
             // update progress info
-            let percent = ppb * handled as f32;
+            #[allow(clippy::cast_precision_loss)]
+            let percent = ppb * (handled / File::BLOCK_SIZE as u64) as f64;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             if !progress.update(percent as u8) {
                 return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
             }
 
             // calculate size of the next block
             let mut size = buffer.len();
+            #[allow(clippy::cast_possible_truncation)]
             if fill_offset + (size as u64) > max_offset {
                 size = (max_offset - fill_offset) as usize;
             }
@@ -364,14 +381,17 @@ impl File {
         // reopen file with the write permission
         let mut file = OpenOptions::new().read(true).write(true).open(&self.path)?;
 
-        // percent per byte, used for progress calculation
-        let ppb = 100.0 / (self.size - range.end) as f32;
+        // percent per block, used for progress calculation
+        #[allow(clippy::cast_precision_loss)]
+        let ppb = 100.0 / ((self.size - range.end) / File::BLOCK_SIZE as u64) as f64;
 
         let mut offset = range.start;
         let mut buffer = vec![0; File::BLOCK_SIZE];
         loop {
             // update progress info
-            let percent = ppb * (offset - range.start) as f32;
+            #[allow(clippy::cast_precision_loss)]
+            let percent = ppb * ((offset - range.start) / File::BLOCK_SIZE as u64) as f64;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             if !progress.update(percent as u8) {
                 return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
             }
@@ -435,15 +455,12 @@ pub trait ProgressHandler {
 }
 
 #[cfg(test)]
-struct ProgressHandlerTest {
-    pub percent: u8,
-}
+struct ProgressHandlerTest {}
 
 #[cfg(test)]
 impl ProgressHandler for ProgressHandlerTest {
     fn update(&mut self, percent: u8) -> bool {
         assert!(percent <= 100);
-        self.percent = percent;
         true
     }
 }
@@ -463,9 +480,8 @@ fn test_find() {
     file.write_all(&vec![55, 5]).unwrap();
 
     let mut file = File::open(&path).unwrap();
-    let mut progress = ProgressHandlerTest { percent: 0 };
+    let mut progress = ProgressHandlerTest {};
     assert_eq!(file.find(0, &vec![42], false, &mut progress), None);
-    assert_ne!(progress.percent, 0);
 
     assert_eq!(file.find(0, &vec![33, 33], false, &mut progress), Some(5));
     assert_eq!(file.find(5, &vec![33, 33], false, &mut progress), Some(6));
@@ -492,9 +508,8 @@ fn test_cut() {
     file.write_all(&vec![66; 4]).unwrap();
 
     let mut file = File::open(&path).unwrap();
-    let mut progress = ProgressHandlerTest { percent: 0 };
+    let mut progress = ProgressHandlerTest {};
     file.cut(&(2..5), &mut progress).unwrap();
-    assert_ne!(progress.percent, 0);
     assert_eq!(
         file.read(0, 255).unwrap(),
         vec![11, 11, 33, 44, 55, 66, 66, 66, 66]
@@ -516,9 +531,8 @@ fn test_insert() {
     file.write_all(&vec![11, 22, 33, 44, 55, 66, 77]).unwrap();
 
     let mut file = File::open(&path).unwrap();
-    let mut progress = ProgressHandlerTest { percent: 0 };
+    let mut progress = ProgressHandlerTest {};
     file.insert(1, 4, &vec![88, 99], &mut progress).unwrap();
-    assert_ne!(progress.percent, 0);
     assert_eq!(
         file.read(0, 255).unwrap(),
         vec![11, 88, 99, 88, 99, 22, 33, 44, 55, 66, 77]

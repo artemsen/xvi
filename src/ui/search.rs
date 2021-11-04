@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::dialog::*;
-use super::widget::*;
+use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
+use super::widget::{Button, Checkbox, Edit, EditFormat, StdButton, Text, WidgetData};
 
 /// Dialog for configuring search parameters.
 pub struct SearchDlg {
@@ -74,10 +74,10 @@ impl SearchDlg {
 
     /// Get current search sequence.
     pub fn get_sequence(&self) -> Option<Vec<u8>> {
-        if !self.history.is_empty() {
-            Some(self.history[0].clone())
-        } else {
+        if self.history.is_empty() {
             None
+        } else {
+            Some(self.history[0].clone())
         }
     }
 
@@ -141,10 +141,10 @@ impl Default for SearchDlg {
         Self {
             history: Vec::new(),
             backward: false,
-            item_hex: -1,
-            item_ascii: -1,
-            item_ok: -1,
-            item_cancel: -1,
+            item_hex: ItemId::MAX,
+            item_ascii: ItemId::MAX,
+            item_ok: ItemId::MAX,
+            item_cancel: ItemId::MAX,
         }
     }
 }

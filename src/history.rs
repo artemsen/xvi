@@ -37,7 +37,7 @@ impl History {
     /// Save history data to the file.
     pub fn save(&self) {
         if let Some(file) = History::file() {
-            let _ = self.ini.save(&file);
+            self.ini.save(&file).ok();
         }
     }
 
@@ -118,7 +118,7 @@ impl History {
 
     /// Add last position for the specified file.
     pub fn add_filepos(&mut self, file: &str, offset: u64) {
-        let section = &mut self
+        let section = self
             .ini
             .sections
             .entry(History::FILE.to_string())
@@ -151,7 +151,7 @@ impl History {
         Some(dir.join("xvi").join("history"))
     }
 
-    /// Split the "file:offset" line into components.
+    /// Split the `file:offset` line into components.
     fn filepos(line: &str) -> Option<(&str, u64)> {
         let split: Vec<&str> = line.rsplitn(2, ':').collect();
         if split.len() == 2 {

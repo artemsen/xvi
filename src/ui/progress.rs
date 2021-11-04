@@ -3,8 +3,8 @@
 
 use super::super::curses::{Curses, Event, Key};
 use super::super::file::ProgressHandler;
-use super::dialog::*;
-use super::widget::*;
+use super::dialog::{Dialog, DialogType, ItemId};
+use super::widget::{Button, ProgressBar, StdButton, WidgetData};
 
 /// Progress dialog.
 pub struct ProgressDlg {

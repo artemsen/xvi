@@ -93,7 +93,7 @@ impl CmdLineArgs {
 }
 
 #[test]
-fn test_cmdargs_simple() {
+fn test_simple() {
     let args = ["--help".to_string()];
     let args = CmdLineArgs::parse(args.to_vec()).unwrap();
     assert!(args.help);
@@ -117,7 +117,7 @@ fn test_cmdargs_simple() {
 }
 
 #[test]
-fn test_cmdargs_offset() {
+fn test_offset() {
     let args = ["--offset".to_string(), "0x12345678".to_string()];
     let args = CmdLineArgs::parse(args.to_vec()).unwrap();
     assert!(!args.help);
@@ -146,7 +146,7 @@ fn test_cmdargs_offset() {
 }
 
 #[test]
-fn test_cmdargs_files() {
+fn test_files() {
     let args = ["file".to_string()];
     let args = CmdLineArgs::parse(args.to_vec()).unwrap();
     assert!(!args.help);

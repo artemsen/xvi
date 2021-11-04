@@ -4,7 +4,7 @@
 use super::changes::ChangeList;
 use super::config::Config;
 use super::curses::Window;
-use super::cursor::*;
+use super::cursor::{Cursor, Direction};
 use super::file::File;
 use super::view::View;
 use std::io;
@@ -57,7 +57,7 @@ impl Document {
     }
 
     /// Save current file with the new name.
-    pub fn save_as(&mut self, path: String) -> io::Result<()> {
+    pub fn save_as(&mut self, path: &str) -> io::Result<()> {
         self.file.write_to(Path::new(&path))?;
 
         // reset undo/redo buffer
@@ -99,6 +99,7 @@ impl Document {
 
     /// Change data: replace byte value at the current cursor position.
     pub fn modify_cur(&mut self, value: u8, mask: u8) {
+        #[allow(clippy::cast_possible_truncation)]
         let index = (self.cursor.offset - self.view.offset) as usize;
         let old = self.view.data[index];
         let new = (old & !mask) | (value & mask);
@@ -146,7 +147,7 @@ impl Document {
                 (self.view.offset..self.view.offset + (self.view.lines * self.view.columns) as u64)
                     .contains(o)
             })
-            .cloned()
+            .copied()
             .collect();
     }
 }

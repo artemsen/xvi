@@ -2,31 +2,27 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 /// ASCII table.
-pub struct AsciiTable {
+pub struct Table {
     pub id: &'static str,
     pub name: &'static str,
     pub charset: &'static [char],
 }
 
-impl AsciiTable {
+impl Table {
     /// Get default ASCII table.
     pub fn default() -> &'static Self {
-        ASCII_TABLES.first().unwrap()
+        TABLES.first().unwrap()
     }
 
     /// Get ASCII table by its ID.
     pub fn from_id(id: &str) -> Option<&'static Self> {
-        if let Some(table) = ASCII_TABLES.iter().find(|&t| t.id == id) {
-            Some(table)
-        } else {
-            None
-        }
+        TABLES.iter().find(|&t| t.id == id)
     }
 }
 
 /// Available ASCII tables.
-pub const ASCII_TABLES: &[AsciiTable] = &[
-    AsciiTable {
+pub const TABLES: &[Table] = &[
+    Table {
         id: "437",
         name: "CP437 (original IBM PC)",
         #[rustfmt::skip]
@@ -49,7 +45,7 @@ pub const ASCII_TABLES: &[AsciiTable] = &[
             '≡', '±', '≥', '≤', '⌠', '⌡', '÷', '≈', '°', '∙', '·', '√', 'ⁿ', '²', '■', ' ',
         ],
     },
-    AsciiTable {
+    Table {
         id: "1251",
         name: "Windows-1251 (Cyrillic)",
         #[rustfmt::skip]
@@ -72,7 +68,7 @@ pub const ASCII_TABLES: &[AsciiTable] = &[
             'р', 'с', 'т', 'у', 'ф', 'х', 'ц', 'ч', 'ш', 'щ', 'ъ', 'ы', 'ь', 'э', 'ю', 'я',
         ],
     },
-    AsciiTable {
+    Table {
         id: "ascii",
         name: "Printable characters",
         #[rustfmt::skip]
@@ -95,7 +91,7 @@ pub const ASCII_TABLES: &[AsciiTable] = &[
             ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
         ],
     },
-    AsciiTable {
+    Table {
         id: "named",
         name: "Named control chars",
         #[rustfmt::skip]

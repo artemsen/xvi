@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::super::ascii::*;
-use super::dialog::*;
-use super::widget::*;
+use super::super::ascii::{Table, TABLES};
+use super::dialog::{Dialog, DialogType};
+use super::widget::{Button, Checkbox, Listbox, StdButton, Text, WidgetData};
 
 /// Dialog for setting up view parameters.
 pub struct SetupDlg {
     /// Line width mode (fixed/dynamic).
     pub fixed_width: bool,
     /// ASCII characters table.
-    pub ascii_table: Option<&'static AsciiTable>,
+    pub ascii_table: Option<&'static Table>,
 }
 
 impl SetupDlg {
@@ -22,9 +22,9 @@ impl SetupDlg {
         dlg.add_next(Text::new("ASCII field:"));
 
         let mut select = 0;
-        let mut tables = Vec::with_capacity(ASCII_TABLES.len() + 1 /* None */);
+        let mut tables = Vec::with_capacity(TABLES.len() + 1 /* None */);
         tables.push("None (hide)".to_string());
-        for (index, table) in ASCII_TABLES.iter().enumerate() {
+        for (index, table) in TABLES.iter().enumerate() {
             tables.push(table.name.to_string());
             if let Some(current) = self.ascii_table {
                 if current.id == table.id {
@@ -46,7 +46,7 @@ impl SetupDlg {
                     self.ascii_table = if value == 0 {
                         None
                     } else {
-                        ASCII_TABLES.get(value - 1)
+                        TABLES.get(value - 1)
                     }
                 }
                 return true;
