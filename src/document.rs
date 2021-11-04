@@ -8,6 +8,7 @@ use super::cursor::*;
 use super::file::File;
 use super::view::View;
 use std::io;
+use std::path::Path;
 
 /// Editable document.
 pub struct Document {
@@ -24,7 +25,7 @@ pub struct Document {
 impl Document {
     /// Create new document instance.
     pub fn new(path: &str, config: &Config) -> io::Result<Self> {
-        let file = File::open(path)?;
+        let file = File::open(Path::new(path))?;
         let file_size = file.size;
 
         Ok(Self {
@@ -57,7 +58,7 @@ impl Document {
 
     /// Save current file with the new name.
     pub fn save_as(&mut self, path: String) -> io::Result<()> {
-        self.file.write_to(path)?;
+        self.file.write_to(Path::new(&path))?;
 
         // reset undo/redo buffer
         self.changes.reset();

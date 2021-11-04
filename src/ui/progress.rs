@@ -29,6 +29,8 @@ impl ProgressDlg {
 
 impl ProgressHandler for ProgressDlg {
     fn update(&mut self, percent: u8) -> bool {
+        debug_assert!(percent <= 100);
+
         // update only if value was changed
         if let WidgetData::Number(current) = self.dlg.get(self.bar) {
             if current != percent as usize {

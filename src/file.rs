@@ -6,13 +6,13 @@ use std::fs::OpenOptions;
 use std::io;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::Path;
 
 /// Editable file.
 pub struct File {
     /// File handle
     file: std::fs::File,
-    /// Full path to the file.
+    /// Absolute path to the file.
     pub path: String,
     /// File size.
     pub size: u64,
@@ -23,6 +23,9 @@ pub struct File {
 }
 
 impl File {
+    /// Size of the block for read/write operations.
+    const BLOCK_SIZE: usize = Cache::SIZE;
+
     /// Open file.
     ///
     /// # Arguments
@@ -32,8 +35,12 @@ impl File {
     /// # Return value
     ///
     /// Self instance.
-    pub fn open(file: &str) -> io::Result<Self> {
-        let path = File::abs_path(file);
+    pub fn open(file: &Path) -> io::Result<Self> {
+        let path = std::fs::canonicalize(file)?;
+        if !path.is_file() {
+            return Err(Error::new(ErrorKind::InvalidData, "Not a file"));
+        }
+
         // open file in read only mode
         let file = OpenOptions::new().read(true).open(&path)?;
         let meta = file.metadata()?;
@@ -42,7 +49,7 @@ impl File {
         }
         Ok(Self {
             file,
-            path,
+            path: path.into_os_string().into_string().unwrap(),
             size: meta.len(),
             changes: BTreeMap::new(),
             cache: Cache::new(),
@@ -114,20 +121,21 @@ impl File {
     ///
     /// # Arguments
     ///
-    /// * `path` - path to the new file
+    /// * `file` - path to the new file
     /// * `changes` - map of changes
-    pub fn write_to(&mut self, path: String) -> io::Result<()> {
+    pub fn write_to(&mut self, file: &Path) -> io::Result<()> {
+        let path = std::fs::canonicalize(file)?;
         // create new file
-        let path = File::abs_path(&path);
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(&path)?;
+        file.set_len(0)?;
 
         let mut offset = 0;
         loop {
-            let data = self.read(offset, 1024)?;
+            let data = self.read(offset, File::BLOCK_SIZE)?;
             file.write_all(&data)?;
             offset += data.len() as u64;
             if offset >= self.size {
@@ -136,7 +144,7 @@ impl File {
         }
 
         self.file = file;
-        self.path = path;
+        self.path = path.into_os_string().into_string().unwrap();
 
         // reset
         self.cache.data.clear();
@@ -164,10 +172,8 @@ impl File {
         backward: bool,
         progress: &mut dyn ProgressHandler,
     ) -> Option<u64> {
-        let mut handled = 0;
-
-        let step = 1024;
-        let size = step + sequence.len() as i64;
+        debug_assert!(File::BLOCK_SIZE > sequence.len());
+        let size = File::BLOCK_SIZE;
         let mut offset = start as i64;
 
         if backward {
@@ -178,10 +184,13 @@ impl File {
 
         let mut round = false;
 
+        // percent per byte, used for progress calculation
+        let ppb = 100.0 / self.size as f32;
+        let mut handled = 0;
+
         loop {
             // update progress info
-            handled += step as u64;
-            let percent = 100.0 / (self.size as f32) * handled as f32;
+            let percent = ppb * handled as f32;
             if !progress.update(percent as u8) {
                 return None; // aborted by user
             }
@@ -197,18 +206,18 @@ impl File {
                 if round && (offset as u64) < start {
                     break;
                 }
-                offset -= size;
+                offset -= size as i64;
                 if offset < 0 {
                     if self.size < size as u64 {
                         offset = 0;
                     } else {
-                        offset = self.size as i64 - size;
+                        offset = self.size as i64 - size as i64;
                     }
                     round = true;
                 }
             }
 
-            let file_data = self.read(offset as u64, size as usize).unwrap();
+            let file_data = self.read(offset as u64, size).unwrap();
             let mut window = file_data.windows(sequence.len());
             if !backward {
                 if let Some(pos) = window.position(|wnd| wnd == sequence) {
@@ -219,11 +228,13 @@ impl File {
             }
 
             if !backward {
-                offset += step;
+                offset += File::BLOCK_SIZE as i64;
                 if round && offset as u64 >= start {
                     break;
                 }
             }
+
+            handled += file_data.len() as u64;
         }
 
         None
@@ -254,33 +265,28 @@ impl File {
         // extend the file
         file.set_len(self.size + length)?;
 
-        // progress
-        let byte_wight = 100.0 / (self.size - offset + length) as f32;
-        let mut bytes_handled = 0;
+        // percent per byte, used for progress calculation
+        let ppb = 100.0 / (self.size - offset + length) as f32;
+        let mut handled = 0;
+
+        let mut buffer = vec![0; File::BLOCK_SIZE];
 
         // move (copy) data to the end of file
         let mut back_offset = self.size;
-        let mut buffer = vec![0; 1024];
-        loop {
+        while back_offset > offset {
             // update progress info
-            let percent = byte_wight * bytes_handled as f32;
+            let percent = ppb * handled as f32;
             if !progress.update(percent as u8) {
                 return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
             }
 
             // calculate size and position of the next block
             let mut size = buffer.len();
-            if back_offset < size as u64 {
-                size = back_offset as usize;
-            }
-            if back_offset < offset + length {
-                break;
-            }
-            if back_offset - (size as u64) < offset + length {
+            if back_offset - (size as u64).min(back_offset) <= offset {
                 size = (back_offset - offset) as usize;
             }
             let read_offset = back_offset - size as u64;
-            let write_offset = read_offset + length;
+            let write_offset = back_offset + length - size as u64;
 
             // read data
             file.seek(SeekFrom::Start(read_offset))?;
@@ -290,8 +296,9 @@ impl File {
             file.seek(SeekFrom::Start(write_offset))?;
             file.write_all(&buffer[..size])?;
 
+            //dst_end -= size as u64;
             back_offset -= size as u64;
-            bytes_handled += size as u64;
+            handled += size as u64;
         }
 
         // fill with pattern
@@ -300,7 +307,7 @@ impl File {
         let mut pattern_pos = 0;
         while fill_offset < max_offset {
             // update progress info
-            let percent = byte_wight * bytes_handled as f32;
+            let percent = ppb * handled as f32;
             if !progress.update(percent as u8) {
                 return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
             }
@@ -325,7 +332,7 @@ impl File {
             file.write_all(&buffer[..size])?;
 
             fill_offset += size as u64;
-            bytes_handled += size as u64;
+            handled += size as u64;
         }
 
         file.sync_all()?;
@@ -352,16 +359,19 @@ impl File {
         debug_assert!(self.changes.is_empty());
         debug_assert!(!range.is_empty());
 
+        let range_len = range.end - range.start;
+
         // reopen file with the write permission
         let mut file = OpenOptions::new().read(true).write(true).open(&self.path)?;
 
-        let range_len = range.end - range.start;
+        // percent per byte, used for progress calculation
+        let ppb = 100.0 / (self.size - range.end) as f32;
+
         let mut offset = range.start;
-        let mut buffer = vec![0; 1024];
+        let mut buffer = vec![0; File::BLOCK_SIZE];
         loop {
             // update progress info
-            let percent =
-                100.0 / (self.size - buffer.len() as u64) as f32 * (offset - range.start) as f32;
+            let percent = ppb * (offset - range.start) as f32;
             if !progress.update(percent as u8) {
                 return Err(Error::new(ErrorKind::Interrupted, "Canceled by user"));
             }
@@ -390,27 +400,6 @@ impl File {
         self.cache.data.clear();
 
         Ok(())
-    }
-
-    /// Get absolute path to the file.
-    ///
-    /// # Arguments
-    ///
-    /// * `file` - path to the file
-    ///
-    /// # Return value
-    ///
-    /// Absolute path.
-    fn abs_path(file: &str) -> String {
-        if let Ok(path) = PathBuf::from(file).canonicalize() {
-            if let Ok(path) = path.into_os_string().into_string() {
-                path
-            } else {
-                file.to_string()
-            }
-        } else {
-            file.to_string()
-        }
     }
 }
 
@@ -443,4 +432,97 @@ impl Cache {
 /// Progress handler interface for long time operations.
 pub trait ProgressHandler {
     fn update(&mut self, percent: u8) -> bool;
+}
+
+#[cfg(test)]
+struct ProgressHandlerTest {
+    pub percent: u8,
+}
+
+#[cfg(test)]
+impl ProgressHandler for ProgressHandlerTest {
+    fn update(&mut self, percent: u8) -> bool {
+        assert!(percent <= 100);
+        self.percent = percent;
+        true
+    }
+}
+
+#[test]
+fn test_find() {
+    let path = std::env::temp_dir().join("xvi_test_file.find");
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&path)
+        .unwrap();
+    file.set_len(0).unwrap();
+    file.write_all(&vec![11; 4]).unwrap();
+    file.write_all(&vec![22, 33, 33, 33, 44]).unwrap();
+    file.write_all(&vec![55, 5]).unwrap();
+
+    let mut file = File::open(&path).unwrap();
+    let mut progress = ProgressHandlerTest { percent: 0 };
+    assert_eq!(file.find(0, &vec![42], false, &mut progress), None);
+    assert_ne!(progress.percent, 0);
+
+    assert_eq!(file.find(0, &vec![33, 33], false, &mut progress), Some(5));
+    assert_eq!(file.find(5, &vec![33, 33], false, &mut progress), Some(6));
+    assert_eq!(
+        file.find(file.size, &vec![33, 33], true, &mut progress),
+        Some(6)
+    );
+
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn test_cut() {
+    let path = std::env::temp_dir().join("xvi_test_file.cut");
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&path)
+        .unwrap();
+    file.set_len(0).unwrap();
+    file.write_all(&vec![11; 4]).unwrap();
+    file.write_all(&vec![22, 33, 44, 55]).unwrap();
+    file.write_all(&vec![66; 4]).unwrap();
+
+    let mut file = File::open(&path).unwrap();
+    let mut progress = ProgressHandlerTest { percent: 0 };
+    file.cut(&(2..5), &mut progress).unwrap();
+    assert_ne!(progress.percent, 0);
+    assert_eq!(
+        file.read(0, 255).unwrap(),
+        vec![11, 11, 33, 44, 55, 66, 66, 66, 66]
+    );
+
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn test_insert() {
+    let path = std::env::temp_dir().join("xvi_test_file.insert");
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&path)
+        .unwrap();
+    file.set_len(0).unwrap();
+    file.write_all(&vec![11, 22, 33, 44, 55, 66, 77]).unwrap();
+
+    let mut file = File::open(&path).unwrap();
+    let mut progress = ProgressHandlerTest { percent: 0 };
+    file.insert(1, 4, &vec![88, 99], &mut progress).unwrap();
+    assert_ne!(progress.percent, 0);
+    assert_eq!(
+        file.read(0, 255).unwrap(),
+        vec![11, 88, 99, 88, 99, 22, 33, 44, 55, 66, 77]
+    );
+
+    std::fs::remove_file(path).unwrap();
 }

@@ -129,7 +129,7 @@ impl IniFile {
 
 #[test]
 fn test_load() {
-    let tmp_file = std::env::temp_dir().join("xvi_test_load.ini");
+    let tmp_file = std::env::temp_dir().join("xvi_test_ini.load");
     let ini_data = r#"#comment
 [section1]
 [Section2]
@@ -174,7 +174,7 @@ fn test_save() {
         ],
     );
 
-    let tmp_file = std::env::temp_dir().join("xvi_test_save.ini");
+    let tmp_file = std::env::temp_dir().join("xvi_test_ini.save");
     ini.save(&tmp_file).unwrap();
 
     let ini_data = std::fs::read_to_string(&tmp_file).unwrap();
