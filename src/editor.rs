@@ -476,7 +476,7 @@ impl Editor {
 
     /// Save current file with new name, returns false if operation failed.
     fn save_as(doc: &mut Document) -> bool {
-        if let Some(new_name) = SaveAsDlg::default().show(doc.file.path.clone()) {
+        if let Some(new_name) = SaveAsDlg::show(doc.file.path.clone()) {
             loop {
                 //todo: let mut progress = ProgressDlg::new("Save as...");
                 match doc.save_as(&new_name) {
@@ -486,7 +486,7 @@ impl Editor {
                     Err(err) => {
                         if let Some(btn) = MessageBox::new("Error", DialogType::Error)
                             .center("Error writing file")
-                            .center(&doc.file.path)
+                            .center(&new_name)
                             .center(&format!("{}", err))
                             .button(StdButton::Retry, true)
                             .button(StdButton::Cancel, false)

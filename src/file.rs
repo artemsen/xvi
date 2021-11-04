@@ -128,26 +128,27 @@ impl File {
     /// * `file` - path to the new file
     /// * `changes` - map of changes
     pub fn write_to(&mut self, file: &Path) -> io::Result<()> {
-        let path = std::fs::canonicalize(file)?;
         // create new file
-        let mut file = OpenOptions::new()
+        let mut new_file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(&path)?;
-        file.set_len(0)?;
+            .open(&file)?;
+        new_file.set_len(0)?;
 
         let mut offset = 0;
         loop {
             let data = self.read(offset, File::BLOCK_SIZE)?;
-            file.write_all(&data)?;
+            new_file.write_all(&data)?;
             offset += data.len() as u64;
             if offset >= self.size {
                 break; //eof
             }
         }
 
-        self.file = file;
+        self.file = new_file;
+
+        let path = std::fs::canonicalize(file)?;
         self.path = path.into_os_string().into_string().unwrap();
 
         // reset
