@@ -81,7 +81,7 @@ impl File {
 
         // update cache if needed
         if !self.cache.has(offset, size) {
-            let cache_size = Cache::SIZE.min(max_size);
+            let cache_size = Cache::SIZE.min(max_size).max(size);
             self.cache.data.resize(cache_size, 0);
             self.cache.start = offset;
             self.file.seek(SeekFrom::Start(offset))?;

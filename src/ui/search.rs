@@ -94,7 +94,7 @@ impl SearchDialog {
                         .step_by(2)
                         .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
                         .collect(),
-                )
+                );
             }
         }
         result

@@ -137,8 +137,12 @@ impl View {
     /// * `doc` - document to render
     pub fn draw(&self, doc: &Document) {
         self.draw_statusbar(doc);
-        self.draw_text(doc);
-        self.colorize(doc);
+        self.draw_offset(doc);
+        self.draw_hex(doc);
+        if self.ascii_table.is_some() {
+            self.draw_ascii(doc);
+        }
+        self.highlight(doc);
     }
 
     /// Print the status bar.
@@ -187,140 +191,151 @@ impl View {
         }
 
         // draw status bar
+        Curses::color_on(Color::StatusBar);
         let statusbar = format!("{:<width$}{}", path, stat, width = left_len);
         self.window.print(0, 0, &statusbar);
-        self.window.color(0, 0, self.window.width, Color::StatusBar);
     }
 
-    /// Print the text representation of the current page.
+    /// Print the offset column.
     ///
     /// # Arguments
     ///
     /// * `doc` - document to render
-    fn draw_text(&self, doc: &Document) {
-        Curses::color_on(Color::HexNormal);
-        let mut hex = String::with_capacity(self.columns * 3 + self.columns / View::BYTES_IN_WORD);
-        let mut ascii = String::with_capacity(self.columns);
-
-        for y in 0..self.lines {
-            let offset = self.offset + (y * self.columns) as u64;
-            let line = if offset >= doc.file.size {
-                // fill with spaces to erase previous text
-                (0..self.window.width).map(|_| ' ').collect::<String>()
-            } else {
-                // fill hex and ascii
-                hex.clear();
-                ascii.clear();
-                for x in 0..self.columns {
-                    if !hex.is_empty() {
-                        hex.push(' '); // byte delimiter
-                        if x % View::BYTES_IN_WORD == 0 {
-                            hex.push(' '); // word delimiter
-                        }
-                    }
-                    if let Some(&byte) = self.data.get((offset + x as u64 - self.offset) as usize) {
-                        hex.push_str(&format!("{:02x}", byte));
-                        if let Some(table) = self.ascii_table {
-                            ascii.push(table.charset[byte as usize]);
-                        }
-                    } else {
-                        hex.push_str("  ");
-                        if self.ascii_table.is_some() {
-                            ascii.push(' ');
-                        }
-                    }
-                }
-                // compose the final string
-                let mut line = format!(
-                    "{:0ow$x}{:fm$}{}",
-                    offset,
-                    "",
-                    hex,
-                    ow = self.offset_width,
-                    fm = View::FIELD_MARGIN
-                );
-                if self.ascii_table.is_some() {
-                    line.push_str(&format!("{:fm$}{}", "", ascii, fm = View::FIELD_MARGIN));
-                }
-                line
-            };
-
-            self.window.print(0, y + 1 /*status bar*/, &line);
-        }
-    }
-
-    /// Colorize the view.
-    ///
-    /// # Arguments
-    ///
-    /// * `doc` - document to render
-    fn colorize(&self, doc: &Document) {
-        // calculate cursor position (indexes within the page data)
-        let cursor_x = doc.cursor.offset as usize % self.columns;
+    fn draw_offset(&self, doc: &Document) {
+        Curses::color_on(Color::OffsetNormal);
         let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
 
         for y in 0..self.lines {
-            if self.offset + (y * self.columns) as u64 >= doc.file.size {
+            let offset = self.offset + (y * self.columns) as u64;
+            if offset > doc.file.size {
                 break;
             }
+            if cursor_y == y {
+                Curses::color_on(Color::OffsetHi);
+            }
+            let line = format!("{:0width$x}", offset, width = self.offset_width);
+            self.window.print(0, y + 1 /*status bar*/, &line);
+            if cursor_y == y {
+                Curses::color_on(Color::OffsetNormal);
+            }
+        }
+    }
+
+    /// Print the hex field.
+    ///
+    /// # Arguments
+    ///
+    /// * `doc` - document to render
+    fn draw_hex(&self, doc: &Document) {
+        Curses::color_on(Color::HexNormal);
+
+        let cursor_x = (doc.cursor.offset % self.columns as u64) as usize;
+        let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
+        let left_pos = self.offset_width + View::FIELD_MARGIN;
+
+        for y in 0..self.lines {
             let display_y = y + 1 /* status bar */;
-
-            // colorize offset
-            self.window.color(
-                0,
-                display_y,
-                self.offset_width,
-                if y == cursor_y {
-                    Color::OffsetHi
-                } else {
-                    Color::OffsetNormal
-                },
-            );
-
-            // highlight the current line in hex
-            if y == cursor_y {
-                self.window.color(
-                    self.offset_width + View::FIELD_MARGIN,
-                    display_y,
-                    self.hex_width,
-                    Color::HexHi,
-                );
-            }
-
-            // colorize ascii
-            if self.ascii_table.is_some() {
-                self.window.color(
-                    self.offset_width + self.hex_width + View::FIELD_MARGIN * 2,
-                    display_y,
-                    self.columns,
-                    if y == cursor_y {
-                        Color::AsciiHi
+            let offset = self.offset + (y * self.columns) as u64;
+            let text = if offset >= doc.file.size {
+                // fill with spaces to erase previous text
+                (0..self.hex_width).map(|_| ' ').collect::<String>()
+            } else {
+                // fill with hex dump
+                let mut text = String::with_capacity(self.hex_width);
+                for x in 0..self.columns {
+                    if !text.is_empty() {
+                        text.push(' '); // byte delimiter
+                        if x % View::BYTES_IN_WORD == 0 {
+                            text.push(' '); // word delimiter
+                        }
+                    }
+                    if let Some(&byte) = self.data.get((offset + x as u64 - self.offset) as usize) {
+                        text.push_str(&format!("{:02x}", byte));
                     } else {
-                        Color::AsciiNormal
-                    },
-                );
-            }
+                        text.push_str("  ");
+                    }
+                }
+                text
+            };
 
-            // highlight current column inside hex and ascii fields
-            if y != cursor_y {
-                let hex_x = self.offset_width
-                    + View::FIELD_MARGIN
+            if cursor_y == y {
+                Curses::color_on(Color::HexHi);
+            }
+            self.window.print(left_pos, display_y, &text);
+            if cursor_y == y {
+                Curses::color_on(Color::HexNormal);
+            } else {
+                // highlight current column
+                let col_x = left_pos
                     + cursor_x * (View::BYTES_IN_WORD - 1)
                     + cursor_x / View::BYTES_IN_WORD;
                 self.window
-                    .color(hex_x, display_y, View::HEX_LEN, Color::HexHi);
-
-                let ascii_x =
-                    self.offset_width + self.hex_width + View::FIELD_MARGIN * 2 + cursor_x;
-                self.window.color(ascii_x, display_y, 1, Color::AsciiHi);
+                    .color(col_x, display_y, View::HEX_LEN, Color::HexHi);
             }
         }
+    }
+
+    /// Print the ascii field.
+    ///
+    /// # Arguments
+    ///
+    /// * `doc` - document to render
+    fn draw_ascii(&self, doc: &Document) {
+        Curses::color_on(Color::AsciiNormal);
+
+        let cursor_x = (doc.cursor.offset % self.columns as u64) as usize;
+        let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
+        let left_pos = self.offset_width + self.hex_width + View::FIELD_MARGIN * 2;
+
+        debug_assert!(self.ascii_table.is_some());
+        let ascii_table = self.ascii_table.unwrap();
+
+        for y in 0..self.lines {
+            let display_y = y + 1 /* status bar */;
+            let offset = self.offset + (y * self.columns) as u64;
+            let text = if offset >= doc.file.size {
+                // fill with spaces to erase previous text
+                (0..self.columns).map(|_| ' ').collect::<String>()
+            } else {
+                // fill with ascii text
+                (0..self.columns)
+                    .map(|i| {
+                        let index = (offset + i as u64 - self.offset) as usize;
+                        if let Some(&byte) = self.data.get(index) {
+                            ascii_table.charset[byte as usize]
+                        } else {
+                            ' '
+                        }
+                    })
+                    .collect::<String>()
+            };
+
+            if cursor_y == y {
+                Curses::color_on(Color::AsciiHi);
+            }
+            self.window.print(left_pos, display_y, &text);
+            if cursor_y == y {
+                Curses::color_on(Color::AsciiNormal);
+            } else {
+                // highlight current column
+                let col_x = left_pos + cursor_x;
+                self.window.color(col_x, display_y, 1, Color::AsciiHi);
+            }
+        }
+    }
+
+    /// Highlight changes and diffs.
+    ///
+    /// # Arguments
+    ///
+    /// * `doc` - document to render
+    fn highlight(&self, doc: &Document) {
+        // calculate cursor position (indexes within the page data)
+        let cursor_x = (doc.cursor.offset % self.columns as u64) as usize;
+        let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
 
         // highlight diff
-        for &offset in self
-            .differs
-            .range(self.offset..(self.offset + self.data.len() as u64))
-        {
+        for &offset in &self.differs {
             let cx = offset as usize % self.columns;
             let cy = (offset - self.offset) as usize / self.columns;
             if let Some((x, y)) = self.get_position(offset, true) {
@@ -342,10 +357,7 @@ impl View {
         }
 
         // highlight changes
-        for &offset in self
-            .changes
-            .range(self.offset..(self.offset + self.data.len() as u64))
-        {
+        for &offset in &self.changes {
             let cx = offset as usize % self.columns;
             let cy = (offset - self.offset) as usize / self.columns;
             if let Some((x, y)) = self.get_position(offset, true) {

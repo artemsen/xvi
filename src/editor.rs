@@ -483,6 +483,7 @@ impl Editor {
         let current = &self.documents[self.current];
         let has_ascii = current.view.ascii_table.is_some();
 
+        #[allow(clippy::collapsible_else_if)]
         if forward {
             if current.cursor.place == Place::Hex && has_ascii {
                 self.documents
