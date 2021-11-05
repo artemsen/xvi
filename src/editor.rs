@@ -98,21 +98,30 @@ impl Editor {
                         }
                     }
                     _ => {
-                        self.handle_key(&key);
+                        if !self.key_input_common(&key) {
+                            if self.documents[self.current].cursor.place == Place::Hex {
+                                self.key_input_hex(&key);
+                            } else {
+                                self.key_input_ascii(&key);
+                            }
+                        }
                     }
                 },
             }
         }
     }
 
-    /// Keyboard input handler.
+    /// Common keyboard input handler.
     ///
     /// # Arguments
     ///
     /// * `key` - pressed key
-    #[allow(clippy::too_many_lines)]
-    fn handle_key(&mut self, key: &KeyPress) {
-        let handled = match key.key {
+    ///
+    /// # Return value
+    ///
+    /// true if keay was handled
+    fn key_input_common(&mut self, key: &KeyPress) -> bool {
+        match key.key {
             Key::F(1) => {
                 Editor::help();
                 true
@@ -156,47 +165,7 @@ impl Editor {
                 true
             }
             Key::Tab => {
-                if key.modifier == KeyPress::NONE {
-                    if self.documents[self.current].cursor.place == Place::Hex
-                        && self.documents[self.current].view.ascii_table.is_some()
-                    {
-                        self.documents
-                            .iter_mut()
-                            .for_each(|doc| doc.cursor.set_place(Place::Ascii));
-                    } else {
-                        if self.documents[self.current].cursor.place == Place::Ascii {
-                            self.current += 1;
-                            if self.current == self.documents.len() {
-                                self.current = 0;
-                            }
-                        }
-                        self.documents
-                            .iter_mut()
-                            .for_each(|doc| doc.cursor.set_place(Place::Hex));
-                    }
-                } else if key.modifier == KeyPress::SHIFT {
-                    if self.documents[self.current].cursor.place == Place::Ascii {
-                        self.documents
-                            .iter_mut()
-                            .for_each(|doc| doc.cursor.set_place(Place::Hex));
-                    } else {
-                        if self.documents[self.current].cursor.place == Place::Hex {
-                            if self.current > 0 {
-                                self.current -= 1;
-                            } else {
-                                self.current = self.documents.len() - 1;
-                            }
-                        }
-                        let place = if self.documents[self.current].view.ascii_table.is_some() {
-                            Place::Ascii
-                        } else {
-                            Place::Hex
-                        };
-                        self.documents
-                            .iter_mut()
-                            .for_each(|doc| doc.cursor.set_place(place.clone()));
-                    }
-                }
+                self.switch_field(key.modifier != KeyPress::SHIFT);
                 true
             }
             Key::Left => {
@@ -294,79 +263,85 @@ impl Editor {
                 }
             }
             _ => false,
-        };
-
-        if handled {
-            return;
         }
+    }
 
-        if self.documents[self.current].cursor.place == Place::Ascii {
-            // ascii mode specific
-            if let Key::Char(' '..='~') = key.key {
+    /// Keyboard input handler (HEX field focused).
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - pressed key
+    fn key_input_hex(&mut self, key: &KeyPress) {
+        match key.key {
+            Key::Char('G') => {
+                self.move_cursor(&Direction::FileEnd);
+            }
+            Key::Char('g') => {
+                self.move_cursor(&Direction::FileBegin);
+            }
+            Key::Char(':') => {
+                self.goto();
+            }
+            Key::Char('/') => {
+                self.find();
+            }
+            Key::Char('n') => {
+                self.find_nearby(self.search_backward);
+            }
+            Key::Char('N') => {
+                self.find_nearby(!self.search_backward);
+            }
+            Key::Char('h') => {
+                self.move_cursor(&Direction::PrevByte);
+            }
+            Key::Char('l') => {
+                self.move_cursor(&Direction::NextByte);
+            }
+            Key::Char('j') => {
+                self.move_cursor(&Direction::LineUp);
+            }
+            Key::Char('k') => {
+                self.move_cursor(&Direction::LineDown);
+            }
+            Key::Char('a'..='f' | 'A'..='F' | '0'..='9') => {
                 if key.modifier == KeyPress::NONE {
                     if let Key::Char(chr) = key.key {
-                        self.documents[self.current].modify_cur(chr as u8, 0xff);
-                        self.move_cursor(&Direction::NextByte);
+                        let half = match chr {
+                            'a'..='f' => chr as u8 - b'a' + 10,
+                            'A'..='F' => chr as u8 - b'A' + 10,
+                            '0'..='9' => chr as u8 - b'0',
+                            _ => unreachable!(),
+                        };
+                        let (value, mask) =
+                            if self.documents[self.current].cursor.half == HalfByte::Left {
+                                (half << 4, 0xf0)
+                            } else {
+                                (half, 0x0f)
+                            };
+                        self.documents[self.current].modify_cur(value, mask);
+                        self.move_cursor(&Direction::NextHalf);
                     }
                 }
             }
-        } else {
-            // hex mode specific
-            match key.key {
-                Key::Char('G') => {
-                    self.move_cursor(&Direction::FileEnd);
-                }
-                Key::Char('g') => {
-                    self.move_cursor(&Direction::FileBegin);
-                }
-                Key::Char(':') => {
-                    self.goto();
-                }
-                Key::Char('/') => {
-                    self.find();
-                }
-                Key::Char('n') => {
-                    self.find_nearby(self.search_backward);
-                }
-                Key::Char('N') => {
-                    self.find_nearby(!self.search_backward);
-                }
-                Key::Char('h') => {
-                    self.move_cursor(&Direction::PrevByte);
-                }
-                Key::Char('l') => {
+            Key::Char('u') => {
+                self.documents[self.current].undo();
+            }
+            _ => {}
+        }
+    }
+
+    /// Keyboard input handler (ASCII field focused).
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - pressed key
+    fn key_input_ascii(&mut self, key: &KeyPress) {
+        if let Key::Char(' '..='~') = key.key {
+            if key.modifier == KeyPress::NONE {
+                if let Key::Char(chr) = key.key {
+                    self.documents[self.current].modify_cur(chr as u8, 0xff);
                     self.move_cursor(&Direction::NextByte);
                 }
-                Key::Char('j') => {
-                    self.move_cursor(&Direction::LineUp);
-                }
-                Key::Char('k') => {
-                    self.move_cursor(&Direction::LineDown);
-                }
-                Key::Char('a'..='f' | 'A'..='F' | '0'..='9') => {
-                    if key.modifier == KeyPress::NONE {
-                        if let Key::Char(chr) = key.key {
-                            let half = match chr {
-                                'a'..='f' => chr as u8 - b'a' + 10,
-                                'A'..='F' => chr as u8 - b'A' + 10,
-                                '0'..='9' => chr as u8 - b'0',
-                                _ => unreachable!(),
-                            };
-                            let (value, mask) =
-                                if self.documents[self.current].cursor.half == HalfByte::Left {
-                                    (half << 4, 0xf0)
-                                } else {
-                                    (half, 0x0f)
-                                };
-                            self.documents[self.current].modify_cur(value, mask);
-                            self.move_cursor(&Direction::NextHalf);
-                        }
-                    }
-                }
-                Key::Char('u') => {
-                    self.documents[self.current].undo();
-                }
-                _ => {}
             }
         }
     }
@@ -495,6 +470,52 @@ impl Editor {
             };
 
             doc.resize(wnd);
+        }
+    }
+
+    /// Switch focus between documents and fields:
+    /// curent hex -> current ascii -> next hex -> next ascii
+    ///
+    /// # Arguments
+    ///
+    /// * `forward` - switch direction
+    fn switch_field(&mut self, forward: bool) {
+        let current = &self.documents[self.current];
+        let has_ascii = current.view.ascii_table.is_some();
+
+        if forward {
+            if current.cursor.place == Place::Hex && has_ascii {
+                self.documents
+                    .iter_mut()
+                    .for_each(|doc| doc.cursor.set_place(Place::Ascii));
+            } else {
+                self.current += 1;
+                if self.current == self.documents.len() {
+                    self.current = 0;
+                }
+                if current.cursor.place == Place::Ascii {
+                    self.documents
+                        .iter_mut()
+                        .for_each(|doc| doc.cursor.set_place(Place::Hex));
+                }
+            }
+        } else {
+            if current.cursor.place == Place::Ascii {
+                self.documents
+                    .iter_mut()
+                    .for_each(|doc| doc.cursor.set_place(Place::Hex));
+            } else {
+                if self.current > 0 {
+                    self.current -= 1;
+                } else {
+                    self.current = self.documents.len() - 1;
+                }
+                if current.cursor.place == Place::Hex && has_ascii {
+                    self.documents
+                        .iter_mut()
+                        .for_each(|doc| doc.cursor.set_place(Place::Ascii));
+                }
+            }
         }
     }
 
