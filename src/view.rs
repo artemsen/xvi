@@ -346,13 +346,15 @@ impl View {
                 };
                 self.window.color(x, y, View::HEX_LEN, color);
             }
-            if let Some((x, y)) = self.get_position(offset, false) {
-                let color = if cx == cursor_x || cy == cursor_y {
-                    Color::AsciiDiffHi
-                } else {
-                    Color::AsciiDiff
-                };
-                self.window.color(x, y, 1, color);
+            if self.ascii_table.is_some() {
+                if let Some((x, y)) = self.get_position(offset, false) {
+                    let color = if cx == cursor_x || cy == cursor_y {
+                        Color::AsciiDiffHi
+                    } else {
+                        Color::AsciiDiff
+                    };
+                    self.window.color(x, y, 1, color);
+                }
             }
         }
 
@@ -368,13 +370,15 @@ impl View {
                 };
                 self.window.color(x, y, View::HEX_LEN, color);
             }
-            if let Some((x, y)) = self.get_position(offset, false) {
-                let color = if cx == cursor_x || cy == cursor_y {
-                    Color::AsciiModifiedHi
-                } else {
-                    Color::AsciiModified
-                };
-                self.window.color(x, y, 1, color);
+            if self.ascii_table.is_some() {
+                if let Some((x, y)) = self.get_position(offset, false) {
+                    let color = if cx == cursor_x || cy == cursor_y {
+                        Color::AsciiModifiedHi
+                    } else {
+                        Color::AsciiModified
+                    };
+                    self.window.color(x, y, 1, color);
+                }
             }
         }
     }
