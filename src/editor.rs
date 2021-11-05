@@ -6,16 +6,16 @@ use super::curses::{Color, Curses, Event, Key, KeyPress, Window};
 use super::cursor::{Direction, HalfByte, Place};
 use super::document::Document;
 use super::history::History;
-use super::ui::cut::CutDlg;
+use super::ui::cut::CutDialog;
 use super::ui::dialog::DialogType;
-use super::ui::fill::FillDlg;
-use super::ui::goto::GotoDlg;
-use super::ui::insert::InsertDlg;
+use super::ui::fill::FillDialog;
+use super::ui::goto::GotoDialog;
+use super::ui::insert::InsertDialog;
 use super::ui::messagebox::MessageBox;
-use super::ui::progress::ProgressDlg;
-use super::ui::saveas::SaveAsDlg;
-use super::ui::search::SearchDlg;
-use super::ui::setup::SetupDlg;
+use super::ui::progress::ProgressDialog;
+use super::ui::saveas::SaveAsDialog;
+use super::ui::search::SearchDialog;
+use super::ui::setup::SetupDialog;
 use super::ui::widget::StdButton;
 use std::collections::BTreeSet;
 
@@ -27,13 +27,12 @@ pub struct Editor {
     /// Index of currently selected document.
     current: usize,
 
-    /// "Goto" configuration dialog.
-    goto_dlg: GotoDlg,
-    /// Search configuration dialog.
-    search_dlg: SearchDlg,
-    /// View mode setup dialog.
-    setup_dlg: SetupDlg,
-
+    /// Search history.
+    search_history: Vec<Vec<u8>>,
+    /// Last used search direction.
+    search_backward: bool,
+    /// Address history.
+    goto_history: Vec<u64>,
     /// Last pattern used in fill/insert operations.
     pattern: Vec<u8>,
 }
@@ -57,16 +56,11 @@ impl Editor {
         let mut instance = Self {
             documents,
             current: 0,
-            goto_dlg: GotoDlg::default(),
-            search_dlg: SearchDlg::default(),
-            setup_dlg: SetupDlg {
-                fixed_width: config.fixed_width,
-                ascii_table: config.ascii_table,
-            },
+            search_history: history.get_search(),
+            search_backward: false,
+            goto_history: history.get_goto(),
             pattern: vec![0],
         };
-        instance.goto_dlg.history = history.get_goto();
-        instance.search_dlg.history = history.get_search();
         instance.resize();
 
         // define and apply initial offset
@@ -137,9 +131,9 @@ impl Editor {
             }
             Key::F(5) => {
                 if key.modifier == KeyPress::SHIFT {
-                    self.find_next(self.search_dlg.backward);
+                    self.find_nearby(self.search_backward);
                 } else if key.modifier == KeyPress::ALT {
-                    self.find_next(!self.search_dlg.backward);
+                    self.find_nearby(!self.search_backward);
                 } else {
                     self.find();
                 }
@@ -332,10 +326,10 @@ impl Editor {
                     self.find();
                 }
                 Key::Char('n') => {
-                    self.find_next(self.search_dlg.backward);
+                    self.find_nearby(self.search_backward);
                 }
                 Key::Char('N') => {
-                    self.find_next(!self.search_dlg.backward);
+                    self.find_nearby(!self.search_backward);
                 }
                 Key::Char('h') => {
                     self.move_cursor(&Direction::PrevByte);
@@ -432,256 +426,6 @@ impl Editor {
         }
     }
 
-    /// Show mini help.
-    fn help() {
-        MessageBox::new("XVI: Hex editor", DialogType::Normal)
-            .left("Arrows, PgUp, PgDown: move cursor;")
-            .left("Tab: switch between Hex/ASCII;")
-            .left("u or Ctrl+z: undo;")
-            .left("Ctrl+r or Ctrl+y: redo;")
-            .left("F2: save file; Shift+F2: save as;")
-            .left("Esc or F10: exit.")
-            .left("")
-            .center("Read `man xvi` for more info.")
-            .button(StdButton::Ok, true)
-            .show();
-    }
-
-    /// Save current file, returns false if operation failed.
-    fn save(doc: &mut Document) -> bool {
-        loop {
-            match doc.save() {
-                Ok(()) => {
-                    return true;
-                }
-                Err(err) => {
-                    if let Some(btn) = MessageBox::new("Error", DialogType::Error)
-                        .center("Error writing file")
-                        .center(&doc.file.path)
-                        .center(&format!("{}", err))
-                        .button(StdButton::Retry, true)
-                        .button(StdButton::Cancel, false)
-                        .show()
-                    {
-                        if btn != StdButton::Retry {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-            }
-        }
-    }
-
-    /// Save current file with new name, returns false if operation failed.
-    fn save_as(doc: &mut Document) -> bool {
-        if let Some(new_name) = SaveAsDlg::show(doc.file.path.clone()) {
-            loop {
-                //todo: let mut progress = ProgressDlg::new("Save as...");
-                match doc.save_as(&new_name) {
-                    Ok(()) => {
-                        return true;
-                    }
-                    Err(err) => {
-                        if let Some(btn) = MessageBox::new("Error", DialogType::Error)
-                            .center("Error writing file")
-                            .center(&new_name)
-                            .center(&format!("{}", err))
-                            .button(StdButton::Retry, true)
-                            .button(StdButton::Cancel, false)
-                            .show()
-                        {
-                            if btn != StdButton::Retry {
-                                return false;
-                            }
-                        } else {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-        false
-    }
-
-    /// Goto to specified address.
-    fn goto(&mut self) {
-        let pos = self.documents[self.current].cursor.offset;
-        if let Some(offset) = self.goto_dlg.show(pos) {
-            self.move_cursor(&Direction::Absolute(offset));
-        }
-    }
-
-    /// Find position of the sequence.
-    fn find(&mut self) {
-        if self.search_dlg.show() {
-            self.draw();
-            self.find_next(self.search_dlg.backward);
-        }
-    }
-
-    /// Find next/previous position of the sequence.
-    fn find_next(&mut self, backward: bool) {
-        if let Some(sequence) = self.search_dlg.get_sequence() {
-            let mut progress = ProgressDlg::new("Searching...");
-            let doc = &mut self.documents[self.current];
-            if let Some(offset) =
-                doc.file
-                    .find(doc.cursor.offset, &sequence, backward, &mut progress)
-            {
-                self.move_cursor(&Direction::Absolute(offset));
-            } else if !progress.canceled {
-                self.draw();
-                MessageBox::new("Search", DialogType::Error)
-                    .center("Sequence not found!")
-                    .button(StdButton::Ok, true)
-                    .show();
-            }
-        } else {
-            self.search_dlg.backward = backward;
-            self.find();
-        }
-    }
-
-    /// Fill range.
-    fn fill(&mut self) {
-        let doc = &mut self.documents[self.current];
-        if let Some((range, pattern)) =
-            FillDlg::show(doc.cursor.offset, doc.file.size, &self.pattern)
-        {
-            self.pattern = pattern;
-            let mut pattern_pos = 0;
-            for offset in range.start..range.end {
-                doc.modify_at(offset, self.pattern[pattern_pos]);
-                pattern_pos += 1;
-                if pattern_pos == self.pattern.len() {
-                    pattern_pos = 0;
-                }
-            }
-            doc.update();
-            self.move_cursor(&Direction::Absolute(range.end));
-        }
-    }
-
-    /// Insert bytes.
-    fn insert(&mut self) {
-        let doc = &self.documents[self.current];
-        if doc.file.is_modified() {
-            MessageBox::new("Insert bytes", DialogType::Error)
-                .center(&doc.file.path)
-                .center("was modified.")
-                .center("Please save or undo your changes first.")
-                .button(StdButton::Ok, true)
-                .show();
-            return;
-        }
-        if let Some((mut offset, size, pattern)) = InsertDlg::show(doc.cursor.offset, &self.pattern)
-        {
-            self.pattern = pattern;
-            if offset > doc.file.size {
-                offset = doc.file.size;
-            }
-            self.draw();
-            let mut progress = ProgressDlg::new("Write file...");
-            let doc = &mut self.documents[self.current];
-            if let Err(err) = doc.file.insert(offset, size, &self.pattern, &mut progress) {
-                MessageBox::new("Error", DialogType::Error)
-                    .center("Error writing file")
-                    .center(&doc.file.path)
-                    .center(&format!("{}", err))
-                    .button(StdButton::Cancel, true)
-                    .show();
-            }
-            doc.on_file_changed(offset + size as u64);
-        }
-    }
-
-    /// Cut out range.
-    fn cut(&mut self) {
-        let doc = &self.documents[self.current];
-        if doc.file.is_modified() {
-            MessageBox::new("Cut range", DialogType::Error)
-                .center(&doc.file.path)
-                .center("was modified.")
-                .center("Please save or undo your changes first.")
-                .button(StdButton::Ok, true)
-                .show();
-            return;
-        }
-        if let Some(range) = CutDlg::show(doc.cursor.offset, doc.file.size) {
-            self.draw();
-            let mut progress = ProgressDlg::new("Write file...");
-            let doc = &mut self.documents[self.current];
-            if let Err(err) = doc.file.cut(&range, &mut progress) {
-                MessageBox::new("Error", DialogType::Error)
-                    .center("Error writing file")
-                    .center(&doc.file.path)
-                    .center(&format!("{}", err))
-                    .button(StdButton::Cancel, true)
-                    .show();
-            }
-            doc.on_file_changed(range.end);
-        }
-    }
-
-    /// Setup via GUI.
-    fn setup(&mut self) {
-        if self.setup_dlg.show() {
-            for doc in &mut self.documents {
-                doc.view.fixed_width = self.setup_dlg.fixed_width;
-                doc.view.ascii_table = self.setup_dlg.ascii_table;
-                if doc.view.ascii_table.is_none() {
-                    doc.cursor.set_place(Place::Hex);
-                }
-            }
-            self.resize();
-        }
-    }
-
-    /// Exit from editor.
-    fn exit(&mut self) -> bool {
-        for doc in &mut self.documents {
-            if !doc.file.is_modified() {
-                continue;
-            }
-            if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
-                .center(&doc.file.path)
-                .center("was modified.")
-                .center("Save before exit?")
-                .button(StdButton::Yes, false)
-                .button(StdButton::No, false)
-                .button(StdButton::Cancel, true)
-                .show()
-            {
-                match btn {
-                    StdButton::Yes => {
-                        if !Editor::save(doc) {
-                            return false;
-                        }
-                    }
-                    StdButton::Cancel => {
-                        return false;
-                    }
-                    _ => {}
-                }
-            } else {
-                return false;
-            }
-        }
-
-        // save history
-        let mut history = History::default();
-        history.set_goto(&self.goto_dlg.history);
-        history.set_search(&self.search_dlg.history);
-        self.documents
-            .iter()
-            .for_each(|doc| history.add_filepos(&doc.file.path, doc.cursor.offset));
-        history.save();
-
-        true
-    }
-
     /// Draw editor.
     fn draw(&self) {
         // draw documents
@@ -752,5 +496,268 @@ impl Editor {
 
             doc.resize(wnd);
         }
+    }
+
+    /// Show mini help.
+    fn help() {
+        MessageBox::new("XVI: Hex editor", DialogType::Normal)
+            .left("Arrows, PgUp, PgDown: move cursor;")
+            .left("Tab: switch between Hex/ASCII;")
+            .left("u or Ctrl+z: undo;")
+            .left("Ctrl+r or Ctrl+y: redo;")
+            .left("F2: save file; Shift+F2: save as;")
+            .left("Esc or F10: exit.")
+            .left("")
+            .center("Read `man xvi` for more info.")
+            .button(StdButton::Ok, true)
+            .show();
+    }
+
+    /// Save current file, returns false if operation failed.
+    fn save(doc: &mut Document) -> bool {
+        loop {
+            match doc.save() {
+                Ok(()) => {
+                    return true;
+                }
+                Err(err) => {
+                    if let Some(btn) = MessageBox::new("Error", DialogType::Error)
+                        .center("Error writing file")
+                        .center(&doc.file.path)
+                        .center(&format!("{}", err))
+                        .button(StdButton::Retry, true)
+                        .button(StdButton::Cancel, false)
+                        .show()
+                    {
+                        if btn != StdButton::Retry {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Save current file with new name, returns false if operation failed.
+    fn save_as(doc: &mut Document) -> bool {
+        if let Some(new_name) = SaveAsDialog::show(doc.file.path.clone()) {
+            loop {
+                //todo: let mut progress = ProgressDialog::new("Save as...");
+                match doc.save_as(&new_name) {
+                    Ok(()) => {
+                        return true;
+                    }
+                    Err(err) => {
+                        if let Some(btn) = MessageBox::new("Error", DialogType::Error)
+                            .center("Error writing file")
+                            .center(&new_name)
+                            .center(&format!("{}", err))
+                            .button(StdButton::Retry, true)
+                            .button(StdButton::Cancel, false)
+                            .show()
+                        {
+                            if btn != StdButton::Retry {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Goto to specified address.
+    fn goto(&mut self) {
+        if let Some(offset) = GotoDialog::show(
+            &self.goto_history,
+            self.documents[self.current].cursor.offset,
+        ) {
+            self.goto_history.retain(|o| o != &offset);
+            self.goto_history.insert(0, offset);
+
+            self.move_cursor(&Direction::Absolute(offset));
+        }
+    }
+
+    /// Find position of the sequence.
+    fn find(&mut self) {
+        if let Some((seq, bkg)) = SearchDialog::show(&self.search_history, self.search_backward) {
+            self.search_backward = bkg;
+            self.search_history.retain(|s| s != &seq);
+            self.search_history.insert(0, seq);
+            self.draw();
+            self.find_nearby(self.search_backward);
+        }
+    }
+
+    /// Find next/previous position of the sequence.
+    fn find_nearby(&mut self, backward: bool) {
+        if self.search_history.is_empty() {
+            self.search_backward = backward;
+            self.find();
+        } else {
+            let mut progress = ProgressDialog::new("Searching...");
+            let doc = &mut self.documents[self.current];
+            if let Some(offset) = doc.file.find(
+                doc.cursor.offset,
+                &self.search_history[0],
+                backward,
+                &mut progress,
+            ) {
+                self.move_cursor(&Direction::Absolute(offset));
+            } else if !progress.canceled {
+                self.draw();
+                MessageBox::new("Search", DialogType::Error)
+                    .center("Sequence not found!")
+                    .button(StdButton::Ok, true)
+                    .show();
+            }
+        }
+    }
+
+    /// Fill range.
+    fn fill(&mut self) {
+        let doc = &mut self.documents[self.current];
+        if let Some((range, pattern)) =
+            FillDialog::show(doc.cursor.offset, doc.file.size, &self.pattern)
+        {
+            self.pattern = pattern;
+            let mut pattern_pos = 0;
+            for offset in range.start..range.end {
+                doc.modify_at(offset, self.pattern[pattern_pos]);
+                pattern_pos += 1;
+                if pattern_pos == self.pattern.len() {
+                    pattern_pos = 0;
+                }
+            }
+            doc.update();
+            self.move_cursor(&Direction::Absolute(range.end));
+        }
+    }
+
+    /// Insert bytes.
+    fn insert(&mut self) {
+        let doc = &self.documents[self.current];
+        if doc.file.is_modified() {
+            MessageBox::new("Insert bytes", DialogType::Error)
+                .center(&doc.file.path)
+                .center("was modified.")
+                .center("Please save or undo your changes first.")
+                .button(StdButton::Ok, true)
+                .show();
+            return;
+        }
+        if let Some((mut offset, size, pattern)) =
+            InsertDialog::show(doc.cursor.offset, &self.pattern)
+        {
+            self.pattern = pattern;
+            if offset > doc.file.size {
+                offset = doc.file.size;
+            }
+            self.draw();
+            let mut progress = ProgressDialog::new("Write file...");
+            let doc = &mut self.documents[self.current];
+            if let Err(err) = doc.file.insert(offset, size, &self.pattern, &mut progress) {
+                MessageBox::new("Error", DialogType::Error)
+                    .center("Error writing file")
+                    .center(&doc.file.path)
+                    .center(&format!("{}", err))
+                    .button(StdButton::Cancel, true)
+                    .show();
+            }
+            doc.on_file_changed(offset + size as u64);
+        }
+    }
+
+    /// Cut out range.
+    fn cut(&mut self) {
+        let doc = &self.documents[self.current];
+        if doc.file.is_modified() {
+            MessageBox::new("Cut range", DialogType::Error)
+                .center(&doc.file.path)
+                .center("was modified.")
+                .center("Please save or undo your changes first.")
+                .button(StdButton::Ok, true)
+                .show();
+            return;
+        }
+        if let Some(range) = CutDialog::show(doc.cursor.offset, doc.file.size) {
+            self.draw();
+            let mut progress = ProgressDialog::new("Write file...");
+            let doc = &mut self.documents[self.current];
+            if let Err(err) = doc.file.cut(&range, &mut progress) {
+                MessageBox::new("Error", DialogType::Error)
+                    .center("Error writing file")
+                    .center(&doc.file.path)
+                    .center(&format!("{}", err))
+                    .button(StdButton::Cancel, true)
+                    .show();
+            }
+            doc.on_file_changed(range.end);
+        }
+    }
+
+    /// Setup via GUI.
+    fn setup(&mut self) {
+        if SetupDialog::show(&mut self.documents[self.current].view) {
+            let fixed_width = self.documents[self.current].view.fixed_width;
+            let ascii_table = self.documents[self.current].view.ascii_table;
+            for doc in &mut self.documents {
+                doc.view.fixed_width = fixed_width;
+                doc.view.ascii_table = ascii_table;
+                if doc.view.ascii_table.is_none() {
+                    doc.cursor.set_place(Place::Hex);
+                }
+            }
+            self.resize();
+        }
+    }
+
+    /// Exit from editor.
+    fn exit(&mut self) -> bool {
+        for doc in &mut self.documents {
+            if !doc.file.is_modified() {
+                continue;
+            }
+            if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
+                .center(&doc.file.path)
+                .center("was modified.")
+                .center("Save before exit?")
+                .button(StdButton::Yes, false)
+                .button(StdButton::No, false)
+                .button(StdButton::Cancel, true)
+                .show()
+            {
+                match btn {
+                    StdButton::Yes => {
+                        if !Editor::save(doc) {
+                            return false;
+                        }
+                    }
+                    StdButton::Cancel => {
+                        return false;
+                    }
+                    _ => {}
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // save history
+        let mut history = History::default();
+        history.set_goto(&self.goto_history);
+        history.set_search(&self.search_history);
+        self.documents
+            .iter()
+            .for_each(|doc| history.add_filepos(&doc.file.path, doc.cursor.offset));
+        history.save();
+
+        true
     }
 }

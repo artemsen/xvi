@@ -6,15 +6,15 @@ use super::range::RangeControl;
 use super::widget::{Button, StdButton, Text};
 use std::ops::Range;
 
-/// Dialog for setting "cut out" parameters.
-pub struct CutDlg {
+/// "Cut out range" dialog.
+pub struct CutDialog {
     rctl: RangeControl,
     btn_ok: ItemId,
     btn_cancel: ItemId,
 }
 
-impl CutDlg {
-    /// Show "Cut out" configuration dialog.
+impl CutDialog {
+    /// Show the "Cut out" configuration dialog.
     ///
     /// # Arguments
     ///
@@ -65,7 +65,7 @@ impl CutDlg {
     }
 }
 
-impl DialogHandler for CutDlg {
+impl DialogHandler for CutDialog {
     fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool {
         current == self.btn_cancel || dialog.is_enabled(self.btn_ok)
     }

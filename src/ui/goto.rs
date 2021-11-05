@@ -5,51 +5,47 @@ use super::super::curses::Window;
 use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
 use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
 
-/// Dialog for setting "goto" parameters.
-pub struct GotoDlg {
-    /// Address history.
-    pub history: Vec<u64>,
+/// "Goto" dialog.
+pub struct GotoDialog {
     // Current offet (cursor position)
     current: u64,
     // Items of the dialog.
-    item_abshex: ItemId,
-    item_absdec: ItemId,
-    item_relhex: ItemId,
-    item_reldec: ItemId,
-    item_cancel: ItemId,
+    abs_hex: ItemId,
+    abs_dec: ItemId,
+    rel_hex: ItemId,
+    rel_dec: ItemId,
 }
 
-impl GotoDlg {
-    /// Show "goto" configuration dialog.
+impl GotoDialog {
+    /// Show the "Goto" configuration dialog.
     ///
     /// # Arguments
     ///
+    /// * `history` - address history
     /// * `current` - current offset
     ///
     /// # Return value
     ///
     /// Absolute offset to jump.
-    pub fn show(&mut self, current: u64) -> Option<u64> {
-        self.current = current;
-
-        let width = 44;
-        let mut dlg = Dialog::new(width + Dialog::PADDING_X * 2, 9, DialogType::Normal, "Goto");
+    pub fn show(history: &[u64], current: u64) -> Option<u64> {
+        // create dialog
+        let mut dlg = Dialog::new(40 + Dialog::PADDING_X * 2, 9, DialogType::Normal, "Goto");
 
         dlg.add_next(Text::new("Absolute offset"));
 
         // absolute offset in dec
-        let mut widget = Edit::new(17, format!("{:x}", self.current), EditFormat::HexUnsigned);
-        widget.history = self.history.iter().map(|o| format!("{:x}", o)).collect();
+        let mut widget = Edit::new(17, format!("{:x}", current), EditFormat::HexUnsigned);
+        widget.history = history.iter().map(|o| format!("{:x}", o)).collect();
         dlg.add(
             Window {
                 x: Dialog::PADDING_X,
                 y: dlg.last_line,
-                width,
+                width: 4,
                 height: 1,
             },
             Text::new("hex:"),
         );
-        self.item_abshex = dlg.add(
+        let abs_hex = dlg.add(
             Window {
                 x: Dialog::PADDING_X + 4,
                 y: dlg.last_line,
@@ -64,12 +60,12 @@ impl GotoDlg {
             Window {
                 x: Dialog::PADDING_X + 23,
                 y: dlg.last_line,
-                width,
+                width: 4,
                 height: 1,
             },
             Text::new("dec:"),
         );
-        self.item_absdec = dlg.add(
+        let abs_dec = dlg.add(
             Window {
                 x: Dialog::PADDING_X + 27,
                 y: dlg.last_line,
@@ -89,12 +85,12 @@ impl GotoDlg {
             Window {
                 x: Dialog::PADDING_X,
                 y: dlg.last_line,
-                width,
+                width: 4,
                 height: 1,
             },
             Text::new("hex:"),
         );
-        self.item_relhex = dlg.add(
+        let rel_hex = dlg.add(
             Window {
                 x: Dialog::PADDING_X + 4,
                 y: dlg.last_line,
@@ -109,12 +105,12 @@ impl GotoDlg {
             Window {
                 x: Dialog::PADDING_X + 23,
                 y: dlg.last_line,
-                width,
+                width: 4,
                 height: 1,
             },
             Text::new("dec:"),
         );
-        self.item_reldec = dlg.add(
+        let rel_dec = dlg.add(
             Window {
                 x: Dialog::PADDING_X + 27,
                 y: dlg.last_line,
@@ -124,23 +120,28 @@ impl GotoDlg {
             Edit::new(17, String::new(), EditFormat::DecSigned),
         );
 
+        // buttons
         dlg.add_button(Button::std(StdButton::Ok, true));
-        self.item_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
+        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
 
-        self.on_item_change(&mut dlg, self.item_abshex);
+        let mut handler = Self {
+            current,
+            abs_hex,
+            abs_dec,
+            rel_hex,
+            rel_dec,
+        };
+
+        handler.on_item_change(&mut dlg, handler.abs_hex);
 
         // run dialog
-        if let Some(id) = dlg.run(self) {
-            if id != self.item_cancel {
-                if let WidgetData::Text(value) = dlg.get(self.item_abshex) {
-                    return match u64::from_str_radix(&value, 16) {
-                        Ok(offset) => {
-                            self.history.retain(|o| o != &offset);
-                            self.history.insert(0, offset);
-                            Some(offset)
-                        }
-                        Err(_) => Some(0),
-                    };
+        if let Some(id) = dlg.run(&mut handler) {
+            if id != btn_cancel {
+                if let WidgetData::Text(value) = dlg.get(handler.abs_hex) {
+                    if let Ok(offset) = u64::from_str_radix(&value, 16) {
+                        return Some(offset);
+                    }
+                    return Some(0);
                 }
             }
         }
@@ -157,12 +158,12 @@ impl GotoDlg {
         // calculate offset
         let mut offset = 0;
         if let WidgetData::Text(value) = dialog.get(source) {
-            if source == self.item_abshex {
+            if source == self.abs_hex {
                 offset = u64::from_str_radix(&value, 16).unwrap_or(0);
-            } else if source == self.item_absdec {
+            } else if source == self.abs_dec {
                 offset = value.parse::<u64>().unwrap_or(0);
-            } else if source == self.item_relhex || source == self.item_reldec {
-                let relative = if source == self.item_relhex {
+            } else if source == self.rel_hex || source == self.rel_dec {
+                let relative = if source == self.rel_hex {
                     i64::from_str_radix(&value, 16).unwrap_or(0)
                 } else {
                     value.parse::<i64>().unwrap_or(0)
@@ -180,26 +181,26 @@ impl GotoDlg {
             }
         }
         // update other fields
-        if source != self.item_abshex {
-            dialog.set(self.item_abshex, WidgetData::Text(format!("{:x}", offset)));
+        if source != self.abs_hex {
+            dialog.set(self.abs_hex, WidgetData::Text(format!("{:x}", offset)));
         }
-        if source != self.item_absdec {
-            dialog.set(self.item_absdec, WidgetData::Text(format!("{}", offset)));
+        if source != self.abs_dec {
+            dialog.set(self.abs_dec, WidgetData::Text(format!("{}", offset)));
         }
-        if source != self.item_relhex {
+        if source != self.rel_hex {
             let offset = offset as i64 - self.current as i64;
             let sign = if offset < 0 { "-" } else { "" };
             let text = format!("{}{:x}", sign, i64::abs(offset));
-            dialog.set(self.item_relhex, WidgetData::Text(text));
+            dialog.set(self.rel_hex, WidgetData::Text(text));
         }
-        if source != self.item_reldec {
+        if source != self.rel_dec {
             let offset = offset as i64 - self.current as i64;
-            dialog.set(self.item_reldec, WidgetData::Text(format!("{}", offset)));
+            dialog.set(self.rel_dec, WidgetData::Text(format!("{}", offset)));
         }
     }
 }
 
-impl DialogHandler for GotoDlg {
+impl DialogHandler for GotoDialog {
     fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
         self.update(dialog, item);
     }
@@ -210,20 +211,6 @@ impl DialogHandler for GotoDlg {
                 dialog.set(item, WidgetData::Text("0".to_string()));
                 self.update(dialog, item);
             }
-        }
-    }
-}
-
-impl Default for GotoDlg {
-    fn default() -> Self {
-        Self {
-            history: Vec::new(),
-            current: 0,
-            item_abshex: ItemId::MAX,
-            item_absdec: ItemId::MAX,
-            item_relhex: ItemId::MAX,
-            item_reldec: ItemId::MAX,
-            item_cancel: ItemId::MAX,
         }
     }
 }

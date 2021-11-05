@@ -4,16 +4,15 @@
 use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
 use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
 
-/// Dialog for asking a user for new file name ("Save as").
-pub struct SaveAsDlg {
-    // Items of the dialog.
+/// "Save as" dialog.
+pub struct SaveAsDialog {
     path: ItemId,
     btn_ok: ItemId,
     btn_cancel: ItemId,
 }
 
-impl SaveAsDlg {
-    /// Show "Save As" dialog.
+impl SaveAsDialog {
+    /// Show the "Save As" dialog.
     ///
     /// # Arguments
     ///
@@ -53,7 +52,7 @@ impl SaveAsDlg {
     }
 }
 
-impl DialogHandler for SaveAsDlg {
+impl DialogHandler for SaveAsDialog {
     fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool {
         current == self.btn_cancel || dialog.is_enabled(self.btn_ok)
     }

@@ -5,8 +5,8 @@ use super::super::curses::Window;
 use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
 use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
 
-/// Dialog for setting "insert" parameters.
-pub struct InsertDlg {
+/// "Insert bytes" dialog.
+pub struct InsertDialog {
     length: ItemId,
     offset: ItemId,
     pattern: ItemId,
@@ -14,8 +14,8 @@ pub struct InsertDlg {
     btn_cancel: ItemId,
 }
 
-impl InsertDlg {
-    /// Show "Insert bytes" configuration dialog.
+impl InsertDialog {
+    /// Show the "Insert bytes" configuration dialog.
     ///
     /// # Arguments
     ///
@@ -98,22 +98,31 @@ impl InsertDlg {
                 } else {
                     0
                 };
-                let pattern = if let WidgetData::Text(val) = dlg.get(handler.pattern) {
-                    (0..val.len())
-                        .step_by(2)
-                        .map(|i| u8::from_str_radix(&val[i..(i + 2).min(val.len())], 16).unwrap())
-                        .collect()
-                } else {
-                    vec![0]
-                };
+                let pattern = handler.get_pattern(&dlg);
                 return Some((offset, length, pattern));
             }
         }
         None
     }
+
+    /// Get current sequence from the pattern field.
+    fn get_pattern(&self, dialog: &Dialog) -> Vec<u8> {
+        if let WidgetData::Text(mut value) = dialog.get(self.pattern) {
+            if !value.is_empty() {
+                if value.len() % 2 != 0 {
+                    value.push('0');
+                }
+                return (0..value.len())
+                    .step_by(2)
+                    .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
+                    .collect();
+            }
+        }
+        vec![0]
+    }
 }
 
-impl DialogHandler for InsertDlg {
+impl DialogHandler for InsertDialog {
     fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool {
         current == self.btn_cancel || dialog.is_enabled(self.btn_ok)
     }

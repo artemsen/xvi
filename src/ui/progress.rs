@@ -7,13 +7,13 @@ use super::dialog::{Dialog, DialogType, ItemId};
 use super::widget::{Button, ProgressBar, StdButton, WidgetData};
 
 /// Progress dialog.
-pub struct ProgressDlg {
+pub struct ProgressDialog {
     dlg: Dialog,
     bar: ItemId,
     pub canceled: bool,
 }
 
-impl ProgressDlg {
+impl ProgressDialog {
     /// Create new progress window.
     pub fn new(title: &str) -> Self {
         let mut dlg = Dialog::new(50, 5, DialogType::Normal, title);
@@ -27,7 +27,7 @@ impl ProgressDlg {
     }
 }
 
-impl ProgressHandler for ProgressDlg {
+impl ProgressHandler for ProgressDialog {
     fn update(&mut self, percent: u8) -> bool {
         debug_assert!(percent <= 100);
 

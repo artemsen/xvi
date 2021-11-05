@@ -201,7 +201,7 @@ impl Checkbox {
 
 impl Widget for Checkbox {
     fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize> {
-        let text = format!("[{}] {}", if self.state { 'X' } else { ' ' }, self.title);
+        let text = format!("[{}] {}", if self.state { 'x' } else { ' ' }, self.title);
         wnd.print(0, 0, &text);
         if focused {
             wnd.color(0, 0, 3, Color::ItemFocused);

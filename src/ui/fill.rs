@@ -6,16 +6,16 @@ use super::range::RangeControl;
 use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
 use std::ops::Range;
 
-/// Dialog for setting "fill" parameters.
-pub struct FillDlg {
+/// "Fill fange" dialog.
+pub struct FillDialog {
     rctl: RangeControl,
     pattern: ItemId,
     btn_ok: ItemId,
     btn_cancel: ItemId,
 }
 
-impl FillDlg {
-    /// Show "Fill" configuration dialog.
+impl FillDialog {
+    /// Show the "Fill range" configuration dialog.
     ///
     /// # Arguments
     ///
@@ -63,22 +63,31 @@ impl FillDlg {
         if let Some(id) = dlg.run(&mut handler) {
             if id != handler.btn_cancel {
                 let range = handler.rctl.get(&dlg).unwrap();
-                let pattern = if let WidgetData::Text(val) = dlg.get(handler.pattern) {
-                    (0..val.len())
-                        .step_by(2)
-                        .map(|i| u8::from_str_radix(&val[i..(i + 2).min(val.len())], 16).unwrap())
-                        .collect()
-                } else {
-                    vec![0]
-                };
+                let pattern = handler.get_pattern(&dlg);
                 return Some((range, pattern));
             }
         }
         None
     }
+
+    /// Get current sequence from the pattern field.
+    fn get_pattern(&self, dialog: &Dialog) -> Vec<u8> {
+        if let WidgetData::Text(mut value) = dialog.get(self.pattern) {
+            if !value.is_empty() {
+                if value.len() % 2 != 0 {
+                    value.push('0');
+                }
+                return (0..value.len())
+                    .step_by(2)
+                    .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
+                    .collect();
+            }
+        }
+        vec![0]
+    }
 }
 
-impl DialogHandler for FillDlg {
+impl DialogHandler for FillDialog {
     fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool {
         current == self.btn_cancel || dialog.is_enabled(self.btn_ok)
     }
