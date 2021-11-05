@@ -17,20 +17,6 @@ pub struct Config {
     pub colors: Vec<(Color, u8, u8)>,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        let mut colors = Vec::new();
-        for &(id, fg, bg) in Config::DARK_THEME {
-            colors.push((id, fg, bg));
-        }
-        Self {
-            fixed_width: false,
-            ascii_table: Some(Table::default()),
-            colors,
-        }
-    }
-}
-
 impl Config {
     const VIEW: &'static str = "View";
     const COLORS: &'static str = "Colors";
@@ -179,4 +165,18 @@ impl Config {
         (Color::EditFocused,     250, 238),
         (Color::EditSelection,   250, 235),
     ];
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        let mut colors = Vec::new();
+        for &(id, fg, bg) in Config::DARK_THEME {
+            colors.push((id, fg, bg));
+        }
+        Self {
+            fixed_width: false,
+            ascii_table: Some(Table::default()),
+            colors,
+        }
+    }
 }

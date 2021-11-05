@@ -45,7 +45,7 @@ impl Editor {
         offset: Option<u64>,
         config: &Config,
     ) -> Result<Self, std::io::Error> {
-        let history = History::new();
+        let history = History::default();
 
         // create document instances
         let mut documents = Vec::with_capacity(files.len());
@@ -671,7 +671,7 @@ impl Editor {
         }
 
         // save history
-        let mut history = History::new();
+        let mut history = History::default();
         history.set_goto(&self.goto_dlg.history);
         history.set_search(&self.search_dlg.history);
         self.documents

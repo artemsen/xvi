@@ -22,18 +22,6 @@ impl History {
     const SEARCH: &'static str = "search";
     const FILE: &'static str = "file";
 
-    /// Create instance: load history file.
-    pub fn new() -> Self {
-        if let Some(file) = History::file() {
-            if let Ok(ini) = IniFile::load(&file) {
-                return Self { ini };
-            }
-        }
-        Self {
-            ini: IniFile::new(),
-        }
-    }
-
     /// Save history data to the file.
     pub fn save(&self) {
         if let Some(file) = History::file() {
@@ -160,6 +148,19 @@ impl History {
             }
         }
         None
+    }
+}
+
+impl Default for History {
+    fn default() -> Self {
+        if let Some(file) = History::file() {
+            if let Ok(ini) = IniFile::load(&file) {
+                return Self { ini };
+            }
+        }
+        Self {
+            ini: IniFile::new(),
+        }
     }
 }
 
