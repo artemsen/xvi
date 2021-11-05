@@ -119,7 +119,7 @@ impl Editor {
     ///
     /// # Return value
     ///
-    /// true if keay was handled
+    /// true if key was handled
     fn key_input_common(&mut self, key: &KeyPress) -> bool {
         match key.key {
             Key::F(1) => {
@@ -140,9 +140,9 @@ impl Editor {
             }
             Key::F(5) => {
                 if key.modifier == KeyPress::SHIFT {
-                    self.find_nearby(self.search_backward);
+                    self.find_closest(self.search_backward);
                 } else if key.modifier == KeyPress::ALT {
-                    self.find_nearby(!self.search_backward);
+                    self.find_closest(!self.search_backward);
                 } else {
                     self.find();
                 }
@@ -172,9 +172,9 @@ impl Editor {
                 if key.modifier == KeyPress::NONE {
                     self.move_cursor(&Direction::PrevByte);
                 } else if key.modifier == KeyPress::SHIFT {
-                    self.move_cursor(&Direction::PrevHalf);
-                } else if key.modifier == KeyPress::ALT {
                     self.move_cursor(&Direction::PrevWord);
+                } else if key.modifier == KeyPress::ALT {
+                    self.closest_change(false);
                 } else if key.modifier == KeyPress::CTRL
                     && self.documents[self.current].cursor.place == Place::Ascii
                 {
@@ -188,9 +188,9 @@ impl Editor {
                 if key.modifier == KeyPress::NONE {
                     self.move_cursor(&Direction::NextByte);
                 } else if key.modifier == KeyPress::SHIFT {
-                    self.move_cursor(&Direction::NextHalf);
-                } else if key.modifier == KeyPress::ALT {
                     self.move_cursor(&Direction::NextWord);
+                } else if key.modifier == KeyPress::ALT {
+                    self.closest_change(true);
                 } else if key.modifier == KeyPress::CTRL
                     && self.documents[self.current].view.ascii_table.is_some()
                     && self.documents[self.current].cursor.place == Place::Hex
@@ -204,8 +204,10 @@ impl Editor {
             Key::Up => {
                 if key.modifier == KeyPress::NONE {
                     self.move_cursor(&Direction::LineUp);
-                } else if key.modifier == KeyPress::ALT {
+                } else if key.modifier == KeyPress::SHIFT {
                     self.move_cursor(&Direction::ScrollUp);
+                } else if key.modifier == KeyPress::ALT {
+                    self.closest_change(false);
                 } else if key.modifier == KeyPress::CTRL && self.current > 0 {
                     self.current -= 1;
                 }
@@ -214,8 +216,10 @@ impl Editor {
             Key::Down => {
                 if key.modifier == KeyPress::NONE {
                     self.move_cursor(&Direction::LineDown);
-                } else if key.modifier == KeyPress::ALT {
+                } else if key.modifier == KeyPress::SHIFT {
                     self.move_cursor(&Direction::ScrollDown);
+                } else if key.modifier == KeyPress::ALT {
+                    self.closest_change(true);
                 } else if key.modifier == KeyPress::CTRL && self.current + 1 < self.documents.len()
                 {
                     self.current += 1;
@@ -273,6 +277,9 @@ impl Editor {
     /// * `key` - pressed key
     fn key_input_hex(&mut self, key: &KeyPress) {
         match key.key {
+            Key::Backspace => {
+                self.move_cursor(&Direction::PrevHalf);
+            }
             Key::Char('G') => {
                 self.move_cursor(&Direction::FileEnd);
             }
@@ -286,10 +293,10 @@ impl Editor {
                 self.find();
             }
             Key::Char('n') => {
-                self.find_nearby(self.search_backward);
+                self.find_closest(self.search_backward);
             }
             Key::Char('N') => {
-                self.find_nearby(!self.search_backward);
+                self.find_closest(!self.search_backward);
             }
             Key::Char('h') => {
                 self.move_cursor(&Direction::PrevByte);
@@ -369,7 +376,38 @@ impl Editor {
         }
     }
 
-    /// Caclulate diff between opened files.
+    /// Jump to the closest change or diff byte.
+    ///
+    /// # Arguments
+    ///
+    /// * `forward` - search direction
+    fn closest_change(&mut self, forward: bool) {
+        let doc = &self.documents[self.current];
+
+        // offset of the closest changed byte
+        let changed = if forward {
+            if let Some((offset, _)) = doc
+                .file
+                .changes
+                .range((doc.cursor.offset + 1)..u64::MAX)
+                .min()
+            {
+                Some(offset)
+            } else {
+                None
+            }
+        } else if let Some((offset, _)) = doc.file.changes.range(0..doc.cursor.offset).max() {
+            Some(offset)
+        } else {
+            None
+        };
+
+        if let Some(&offset) = changed {
+            self.move_cursor(&Direction::Absolute(offset));
+        }
+    }
+
+    /// Calculate diff between opened files.
     fn update_diff(&mut self) {
         for index in 0..self.documents.len() {
             let mut diff = BTreeSet::new();
@@ -474,7 +512,7 @@ impl Editor {
     }
 
     /// Switch focus between documents and fields:
-    /// curent hex -> current ascii -> next hex -> next ascii
+    /// current hex -> current ascii -> next hex -> next ascii
     ///
     /// # Arguments
     ///
@@ -613,12 +651,12 @@ impl Editor {
             self.search_history.retain(|s| s != &seq);
             self.search_history.insert(0, seq);
             self.draw();
-            self.find_nearby(self.search_backward);
+            self.find_closest(self.search_backward);
         }
     }
 
     /// Find next/previous position of the sequence.
-    fn find_nearby(&mut self, backward: bool) {
+    fn find_closest(&mut self, backward: bool) {
         if self.search_history.is_empty() {
             self.search_backward = backward;
             self.find();
