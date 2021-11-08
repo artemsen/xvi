@@ -4,218 +4,162 @@
 use super::super::curses::{Color, Key, KeyPress, Window};
 use unicode_segmentation::UnicodeSegmentation;
 
-/// Widget interface.
-pub trait Widget {
-    /// Draw widget, returns cursor position in the line.
-    fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize>;
+/// Typed widget.
+#[derive(PartialEq)]
+pub enum WidgetType {
+    Separator,
+    StaticText(String),
+    CheckBox(CheckBox),
+    ListBox(ListBox),
+    ProgressBar(u8),
+    Button(Button),
+    Edit(InputLine),
+}
+
+impl WidgetType {
+    /// Draw widget.
+    ///
+    /// # Arguments
+    ///
+    /// * `wnd` - window (canvas)
+    /// * `ctx` - widget context
+    ///
+    /// # Return value
+    ///
+    /// Cursor coordinates on the window.
+    pub fn draw(&self, wnd: &Window, ctx: &WidgetContext) -> Option<(usize, usize)> {
+        match self {
+            WidgetType::Separator => {
+                let text = format!("\u{255f}{:\u{2500}^1$}\u{2562}", "", ctx.width - 2);
+                wnd.print(ctx.x, ctx.y, &text);
+            }
+            WidgetType::StaticText(text) => {
+                wnd.print(ctx.x, ctx.y, text);
+            }
+            WidgetType::CheckBox(widget) => {
+                widget.draw(wnd, ctx);
+            }
+            WidgetType::ListBox(widget) => {
+                widget.draw(wnd, ctx);
+            }
+            WidgetType::ProgressBar(percent) => {
+                debug_assert!(*percent <= 100);
+                let text = format!(" {:>3}%", percent);
+                let barsz = ctx.width - text.len();
+                let fill = *percent as usize * barsz / 100;
+                let bar = "\u{2588}".repeat(fill) + &"\u{2591}".repeat(barsz - fill) + &text;
+                wnd.print(ctx.x, ctx.y, &bar);
+            }
+            WidgetType::Button(widget) => {
+                widget.draw(wnd, ctx);
+            }
+            WidgetType::Edit(widget) => {
+                return widget.draw(wnd, ctx);
+            }
+        };
+        None
+    }
+
+    /// Keyboard input handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - pressed key
+    ///
+    /// # Return value
+    ///
+    /// `true` if key was handled.
+    pub fn key_press(&mut self, key: &KeyPress) -> bool {
+        match self {
+            WidgetType::Edit(widget) => widget.key_press(key),
+            WidgetType::CheckBox(widget) => widget.key_press(key),
+            WidgetType::ListBox(widget) => widget.key_press(key),
+            _ => false,
+        }
+    }
 
     /// Check if widget is focusable.
-    fn focusable(&self) -> bool {
-        false
+    ///
+    /// # Return value
+    ///
+    /// `true` if widget can take focus
+    pub fn focusable(&self) -> bool {
+        matches!(
+            self,
+            WidgetType::CheckBox(_)
+                | WidgetType::Button(_)
+                | WidgetType::ListBox(_)
+                | WidgetType::Edit(_)
+        )
     }
+
     /// Set focus handler.
-    fn focus(&mut self) {}
-
-    /// Keyboard input handler, returns true if key was handled.
-    fn keypress(&mut self, _key: &KeyPress) -> bool {
-        false
-    }
-
-    /// Get data from widget.
-    fn set_data(&mut self, _data: WidgetData) {}
-    /// Set data for widget.
-    fn get_data(&self) -> WidgetData {
-        WidgetData::Bool(false)
-    }
-}
-
-/// Widget data.
-#[derive(Clone, PartialEq)]
-pub enum WidgetData {
-    Text(String),
-    Number(usize),
-    Bool(bool),
-}
-
-/// Static text line.
-pub struct Text {
-    text: String,
-}
-
-impl Text {
-    /// Create new widget instance.
-    pub fn new(text: &str) -> Box<Self> {
-        Box::new(Self {
-            text: String::from(text),
-        })
-    }
-}
-
-impl Widget for Text {
-    fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
-        wnd.print(0, 0, &self.text);
-        None
-    }
-
-    fn set_data(&mut self, data: WidgetData) {
-        if let WidgetData::Text(text) = data {
-            self.text = text;
+    pub fn focus_set(&mut self) {
+        if let WidgetType::Edit(edit) = self {
+            edit.on_focus_set();
         }
     }
-
-    fn get_data(&self) -> WidgetData {
-        WidgetData::Text(self.text.clone())
-    }
 }
 
-/// Static border with title.
-pub struct Border {
-    title: String,
+/// Widget context: linkage with a dialog.
+pub struct WidgetContext {
+    /// Focus flag.
+    pub focused: bool,
+    /// State.
+    pub enabled: bool,
+    /// Start column on the dialog window.
+    pub x: usize,
+    /// Line number on the dialog window.
+    pub y: usize,
+    /// Size of the widget.
+    pub width: usize,
 }
 
-impl Border {
-    /// Create new widget instance.
-    pub fn new(title: &str) -> Box<Self> {
-        Box::new(Self {
-            title: format!(" {} ", title),
-        })
-    }
-}
-
-impl Widget for Border {
-    fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
-        // top
-        let border = format!("\u{2554}{:\u{2550}^1$}\u{2557}", &self.title, wnd.width - 2);
-        wnd.print(0, 0, &border);
-        // bottom
-        let line = (0..wnd.width - 2).map(|_| "\u{2550}").collect::<String>();
-        let border = String::from("\u{255a}") + &line + "\u{255d}";
-        wnd.print(0, wnd.height - 1, &border);
-        // left/right
-        for y in 1..wnd.height - 1 {
-            wnd.print(0, y, "\u{2551}");
-            wnd.print(wnd.width - 1, y, "\u{2551}");
+impl Default for WidgetContext {
+    fn default() -> Self {
+        Self {
+            focused: false,
+            enabled: true,
+            x: 0,
+            y: 0,
+            width: 0,
         }
-        None
     }
 }
 
-/// Static separator (horizontal line).
-pub struct Separator {
-    title: String,
-}
-
-impl Separator {
-    /// Create new widget instance.
-    pub fn new(title: Option<&str>) -> Box<Self> {
-        let title = if let Some(title) = title {
-            format!(" {} ", title)
-        } else {
-            String::new()
-        };
-        Box::new(Self { title })
-    }
-}
-
-impl Widget for Separator {
-    fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
-        let line = format!("\u{255f}{:\u{2500}^1$}\u{2562}", &self.title, wnd.width - 2);
-        wnd.print(0, 0, &line);
-        None
-    }
-}
-
-/// Standard buttons.
-#[derive(Copy, Clone, PartialEq)]
-pub enum StdButton {
-    Ok,
-    Cancel,
-    Retry,
-    Yes,
-    No,
-}
-
-/// Button.
-#[derive(Clone)]
-pub struct Button {
-    pub text: String,
-    pub default: bool,
-}
-
-impl Button {
-    /// Create custom button instance.
-    pub fn new(title: &str, default: bool) -> Box<Self> {
-        let text = format!(
-            "{} {} {}",
-            if default { '{' } else { '[' },
-            title,
-            if default { '}' } else { ']' }
-        );
-        Box::new(Self { text, default })
-    }
-
-    /// Create standard button instance.
-    pub fn std(button: StdButton, default: bool) -> Box<Self> {
-        let text = match button {
-            StdButton::Ok => "OK",
-            StdButton::Cancel => "Cancel",
-            StdButton::Retry => "Retry",
-            StdButton::Yes => "Yes",
-            StdButton::No => "No",
-        };
-        Button::new(text, default)
-    }
-}
-
-impl Widget for Button {
-    fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize> {
-        wnd.print(0, 0, &self.text);
-        if focused {
-            wnd.color(0, 0, self.text.len(), Color::ItemFocused);
-        } else if !enabled {
-            wnd.color(0, 0, self.text.len(), Color::ItemDisabled);
-        }
-        None
-    }
-
-    fn focusable(&self) -> bool {
-        true
-    }
-}
-
-/// Checkbox.
-pub struct Checkbox {
-    pub title: String,
+/// Check box control.
+#[derive(PartialEq)]
+pub struct CheckBox {
     pub state: bool,
+    pub title: String,
 }
-
-impl Checkbox {
-    /// Create new widget instance.
-    pub fn new(title: &str, state: bool) -> Box<Self> {
-        Box::new(Self {
-            title: String::from(title),
-            state,
-        })
-    }
-}
-
-impl Widget for Checkbox {
-    fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize> {
-        let text = format!("[{}] {}", if self.state { 'x' } else { ' ' }, self.title);
-        wnd.print(0, 0, &text);
-        if focused {
-            wnd.color(0, 0, 3, Color::ItemFocused);
-        } else if !enabled {
-            wnd.color(0, 0, 3, Color::ItemDisabled);
+impl CheckBox {
+    /// Draw widget.
+    ///
+    /// # Arguments
+    ///
+    /// * `wnd` - window (canvas)
+    /// * `ctx` - widget context
+    pub fn draw(&self, wnd: &Window, ctx: &WidgetContext) {
+        let text = &format!("[{}] {}", if self.state { 'x' } else { ' ' }, self.title);
+        wnd.print(ctx.x, ctx.y, text);
+        if ctx.focused {
+            wnd.color(ctx.x, ctx.y, 3, Color::ItemFocused);
+        } else if !ctx.enabled {
+            wnd.color(ctx.x, ctx.y, 3, Color::ItemDisabled);
         }
-        None
     }
 
-    fn focusable(&self) -> bool {
-        true
-    }
-
-    fn keypress(&mut self, key: &KeyPress) -> bool {
+    /// Keyboard input handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - pressed key
+    ///
+    /// # Return value
+    ///
+    /// `true` if key was handled.
+    pub fn key_press(&mut self, key: &KeyPress) -> bool {
         if key.key == Key::Char(' ') {
             self.state = !self.state;
             true
@@ -223,56 +167,51 @@ impl Widget for Checkbox {
             false
         }
     }
-
-    fn set_data(&mut self, data: WidgetData) {
-        if let WidgetData::Bool(state) = data {
-            self.state = state;
-        }
-    }
-
-    fn get_data(&self) -> WidgetData {
-        WidgetData::Bool(self.state)
-    }
 }
 
-/// One-line listbox.
-pub struct Listbox {
-    list: Vec<String>,
-    current: usize,
+/// List box control.
+#[derive(PartialEq)]
+pub struct ListBox {
+    pub list: Vec<String>,
+    pub current: usize,
 }
+impl ListBox {
+    /// Draw widget.
+    ///
+    /// # Arguments
+    ///
+    /// * `wnd` - window (canvas)
+    /// * `ctx` - widget context
+    pub fn draw(&self, wnd: &Window, ctx: &WidgetContext) {
+        debug_assert!(self.current < self.list.len());
 
-impl Listbox {
-    /// Create new widget instance.
-    #[allow(dead_code)]
-    pub fn new(list: Vec<String>, current: usize) -> Box<Self> {
-        debug_assert!(!list.is_empty());
-        Box::new(Self { list, current })
-    }
-}
-
-impl Widget for Listbox {
-    fn draw(&self, focused: bool, enabled: bool, wnd: &Window) -> Option<usize> {
         let text = format!(
             "{: ^width$}",
             self.list[self.current],
-            width = wnd.width - 2
+            width = ctx.width - 2
         );
-        wnd.print(0, 0, "\u{25c4}");
-        wnd.print(wnd.width - 1, 0, "\u{25ba}");
-        wnd.print(1, 0, &text);
-        if focused {
-            wnd.color(0, 0, wnd.width, Color::ItemFocused);
-        } else if !enabled {
-            wnd.color(0, 0, wnd.width, Color::ItemDisabled);
+
+        wnd.print(ctx.x, ctx.y, "\u{25c4}");
+        wnd.print(ctx.x + ctx.width - 1, ctx.y, "\u{25ba}");
+        wnd.print(ctx.x + 1, ctx.y, &text);
+
+        if ctx.focused {
+            wnd.color(ctx.x, ctx.y, ctx.width, Color::ItemFocused);
+        } else if !ctx.enabled {
+            wnd.color(ctx.x, ctx.y, ctx.width, Color::ItemDisabled);
         }
-        None
     }
 
-    fn focusable(&self) -> bool {
-        true
-    }
-
-    fn keypress(&mut self, key: &KeyPress) -> bool {
+    /// Keyboard input handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - pressed key
+    ///
+    /// # Return value
+    ///
+    /// `true` if key was handled.
+    pub fn key_press(&mut self, key: &KeyPress) -> bool {
         match key.key {
             Key::Left => {
                 if self.current > 0 {
@@ -290,92 +229,232 @@ impl Widget for Listbox {
         };
         true
     }
+}
 
-    fn set_data(&mut self, data: WidgetData) {
-        if let WidgetData::Number(current) = data {
-            self.current = current;
+/// Button.
+#[derive(PartialEq)]
+pub struct Button {
+    /// Text representation.
+    pub text: String,
+    /// Default button in group.
+    pub default: bool,
+}
+impl Button {
+    /// Draw widget.
+    ///
+    /// # Arguments
+    ///
+    /// * `wnd` - window (canvas)
+    /// * `ctx` - widget context
+    pub fn draw(&self, wnd: &Window, ctx: &WidgetContext) {
+        wnd.print(ctx.x, ctx.y, &self.text);
+        if ctx.focused {
+            wnd.color(ctx.x, ctx.y, ctx.width, Color::ItemFocused);
+        } else if !ctx.enabled {
+            wnd.color(ctx.x, ctx.y, ctx.width, Color::ItemDisabled);
         }
     }
+}
 
-    fn get_data(&self) -> WidgetData {
-        WidgetData::Number(self.current)
+/// Standard buttons.
+#[derive(Clone, Copy, PartialEq)]
+pub enum StandardButton {
+    OK,
+    Cancel,
+    Retry,
+    Yes,
+    No,
+}
+impl StandardButton {
+    /// Get text representation of the button.
+    ///
+    /// # Arguments
+    ///
+    /// * `default` - default button in group
+    ///
+    /// # Return value
+    ///
+    /// Button text.
+    pub fn text(&self, default: bool) -> String {
+        let title = match self {
+            StandardButton::OK => "OK",
+            StandardButton::Cancel => "Cancel",
+            StandardButton::Retry => "Retry",
+            StandardButton::Yes => "Yes",
+            StandardButton::No => "No",
+        };
+        format!(
+            "{} {} {}",
+            if default { '{' } else { '[' },
+            title,
+            if default { '}' } else { ']' }
+        )
     }
 }
 
-/// Progress bar.
-pub struct ProgressBar {
-    pub percent: usize,
-}
-
-impl ProgressBar {
-    /// Create new widget instance.
-    pub fn new() -> Box<Self> {
-        Box::new(Self {
-            percent: usize::MAX,
-        })
-    }
-}
-
-impl Widget for ProgressBar {
-    fn draw(&self, _focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
-        let text = format!("{:>3}%", self.percent);
-        let bar_len = wnd.width - text.len() - 1;
-        let fill = self.percent as usize * bar_len / 100;
-        let mut bar = (0..fill).map(|_| "\u{2588}").collect::<String>();
-        bar += &(fill..bar_len).map(|_| "\u{2591}").collect::<String>();
-        wnd.print(0, 0, &bar);
-        wnd.print(bar_len + 1, 0, &text);
-        None
-    }
-
-    fn set_data(&mut self, data: WidgetData) {
-        if let WidgetData::Number(n) = data {
-            debug_assert!(n <= 100);
-            self.percent = n;
-        }
-    }
-
-    fn get_data(&self) -> WidgetData {
-        WidgetData::Number(self.percent)
-    }
-}
-
-/// Edit formats.
-#[derive(Clone, PartialEq)]
-pub enum EditFormat {
-    Any,
-    HexStream,
-    HexSigned,
-    HexUnsigned,
-    DecSigned,
-    DecUnsigned,
-}
-
-/// Single line editor.
-pub struct Edit {
-    pub value: String,
-    pub history: Vec<String>,
-    history_index: usize,
-    format: EditFormat, // value format
+/// Single line input widget.
+#[derive(PartialEq)]
+pub struct InputLine {
+    /// Editing value.
+    value: String,
+    /// Value format.
+    format: InputFormat,
+    /// Size of the input field.
+    width: usize,
+    /// Selection flag.
     selection: bool,
-    cursor: usize, // cursor position in value string
-    start: usize,  // first visible character of value string
-    pub width: usize,
+    /// Cursor position in value string.
+    cursor: usize,
+    /// First visible character of value string.
+    start: usize,
+    /// Input history.
+    history: Vec<String>,
+    /// Current index in history.
+    current: usize,
 }
-
-impl Edit {
+impl InputLine {
     /// Create new widget instance.
-    pub fn new(width: usize, value: String, format: EditFormat) -> Box<Self> {
-        Box::new(Self {
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - default value
+    /// * `format` - value format
+    /// * `history` - input history
+    /// * `width` - size of the input field
+    ///
+    /// # Return value
+    ///
+    /// Windget instance.
+    pub fn new(value: String, format: InputFormat, history: Vec<String>, width: usize) -> Self {
+        Self {
             value,
-            history: Vec::new(),
-            history_index: 0,
             format,
+            width,
             selection: false,
             cursor: 0,
             start: 0,
-            width,
-        })
+            history,
+            current: 0,
+        }
+    }
+
+    /// Set new value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - new value
+    pub fn set_value(&mut self, value: String) {
+        self.value = value;
+        self.move_cursor(isize::MIN);
+    }
+
+    /// Get the current value.
+    ///
+    /// # Return value
+    ///
+    /// Current value.
+    pub fn get_value(&self) -> &str {
+        &self.value
+    }
+
+    /// Draw widget.
+    ///
+    /// # Arguments
+    ///
+    /// * `wnd` - window (canvas)
+    /// * `ctx` - widget context
+    pub fn draw(&self, wnd: &Window, ctx: &WidgetContext) -> Option<(usize, usize)> {
+        // get substring to display
+        let visible_end = self.start + ctx.width.min(self.length() - self.start);
+        let start = self.char2byte(self.start);
+        let end = self.char2byte(visible_end);
+        let mut substr = self.value[start..end].to_string();
+
+        // erase line up to the end
+        let len = substr.graphemes(true).count();
+        if len < self.width {
+            substr += &" ".repeat(self.width - len);
+        }
+
+        // draw
+        wnd.print(ctx.x, ctx.y, &substr);
+        if !self.history.is_empty() {
+            wnd.print(ctx.x + ctx.width - 1, ctx.y, "\u{25bc}");
+        }
+        let color = if ctx.focused {
+            Color::EditFocused
+        } else {
+            Color::EditNormal
+        };
+        wnd.color(ctx.x, ctx.y, ctx.width, color);
+
+        if ctx.focused {
+            if self.selection {
+                wnd.color(ctx.x, ctx.y, self.cursor - self.start, Color::EditSelection);
+            }
+            Some((ctx.x + self.cursor - self.start, ctx.y))
+        } else {
+            None
+        }
+    }
+
+    /// Keyboard input handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - pressed key
+    ///
+    /// # Return value
+    ///
+    /// `true` if key was handled.
+    pub fn key_press(&mut self, key: &KeyPress) -> bool {
+        match key.key {
+            Key::Up => {
+                if key.modifier & KeyPress::CTRL != 0 {
+                    self.from_history(false);
+                    return true;
+                }
+                return false;
+            }
+            Key::Down => {
+                if key.modifier & KeyPress::CTRL != 0 {
+                    self.from_history(true);
+                    return true;
+                }
+                return false;
+            }
+            Key::Home => {
+                self.move_cursor(isize::MIN);
+            }
+            Key::End => {
+                self.move_cursor(isize::MAX);
+            }
+            Key::Left => {
+                self.move_cursor(-1);
+            }
+            Key::Right => {
+                self.move_cursor(1);
+            }
+            Key::Delete => {
+                self.delete_char(1);
+            }
+            Key::Backspace => {
+                self.delete_char(-1);
+            }
+            Key::Char(ch) => {
+                self.insert_char(ch);
+            }
+            _ => {
+                return false;
+            }
+        };
+        true
+    }
+
+    /// Focus set handler.
+    pub fn on_focus_set(&mut self) {
+        self.move_cursor(isize::max_value());
+        self.selection = true;
     }
 
     /// Move cursor inside the edit string.
@@ -408,18 +487,18 @@ impl Edit {
         let max_dec = 20;
         let max_stream = 256 * 2;
         let allow = match self.format {
-            EditFormat::Any => true,
-            EditFormat::HexStream => self.value.len() < max_stream && ch.is_ascii_hexdigit(),
-            EditFormat::HexSigned => {
+            InputFormat::Any => true,
+            InputFormat::HexStream => self.value.len() < max_stream && ch.is_ascii_hexdigit(),
+            InputFormat::HexSigned => {
                 (self.value.len() < max_hex && ch.is_ascii_hexdigit())
                     || ((self.cursor == 0 || self.selection) && (ch == '-' || ch == '+'))
             }
-            EditFormat::HexUnsigned => self.value.len() <= max_hex && ch.is_ascii_hexdigit(),
-            EditFormat::DecSigned => {
+            InputFormat::HexUnsigned => self.value.len() <= max_hex && ch.is_ascii_hexdigit(),
+            InputFormat::DecSigned => {
                 (self.value.len() < max_dec && ch.is_ascii_digit())
                     || ((self.cursor == 0 || self.selection) && (ch == '-' || ch == '+'))
             }
-            EditFormat::DecUnsigned => self.value.len() <= max_dec && ch.is_ascii_digit(),
+            InputFormat::DecUnsigned => self.value.len() <= max_dec && ch.is_ascii_digit(),
         };
         if allow {
             if self.selection {
@@ -465,15 +544,15 @@ impl Edit {
 
     /// Move through history.
     fn from_history(&mut self, forward: bool) {
-        if forward && self.history_index + 1 < self.history.len() {
-            self.history_index += 1;
-        } else if !forward && self.history_index > 0 {
-            self.history_index -= 1;
+        if forward && self.current + 1 < self.history.len() {
+            self.current += 1;
+        } else if !forward && self.current > 0 {
+            self.current -= 1;
         } else {
             return;
         }
-        self.value = self.history[self.history_index].clone();
-        self.move_cursor(isize::max_value());
+        self.value = self.history[self.current].clone();
+        self.move_cursor(isize::MAX);
         self.selection = true;
     }
 
@@ -497,99 +576,13 @@ impl Edit {
     }
 }
 
-impl Widget for Edit {
-    fn draw(&self, focused: bool, _enabled: bool, wnd: &Window) -> Option<usize> {
-        // get substring to display
-        let visible_end = self.start + self.width.min(self.length() - self.start);
-        let start = self.char2byte(self.start);
-        let end = self.char2byte(visible_end);
-        let substr = &self.value[start..end];
-
-        wnd.print(0, 0, substr);
-        if !self.history.is_empty() {
-            wnd.print(self.width - 1, 0, "\u{25bc}");
-        }
-        wnd.color(
-            0,
-            0,
-            self.width,
-            if focused {
-                Color::EditFocused
-            } else {
-                Color::EditNormal
-            },
-        );
-        if focused {
-            if self.selection {
-                wnd.color(0, 0, self.cursor, Color::EditSelection);
-            }
-            Some(self.cursor - self.start)
-        } else {
-            None
-        }
-    }
-
-    fn focusable(&self) -> bool {
-        true
-    }
-
-    fn focus(&mut self) {
-        self.move_cursor(isize::max_value());
-        self.selection = true;
-    }
-
-    fn keypress(&mut self, key: &KeyPress) -> bool {
-        match key.key {
-            Key::Up => {
-                if key.modifier & KeyPress::CTRL != 0 {
-                    self.from_history(false);
-                    return true;
-                }
-                return false;
-            }
-            Key::Down => {
-                if key.modifier & KeyPress::CTRL != 0 {
-                    self.from_history(true);
-                    return true;
-                }
-                return false;
-            }
-            Key::Home => {
-                self.move_cursor(isize::min_value());
-            }
-            Key::End => {
-                self.move_cursor(isize::max_value());
-            }
-            Key::Left => {
-                self.move_cursor(-1);
-            }
-            Key::Right => {
-                self.move_cursor(1);
-            }
-            Key::Delete => {
-                self.delete_char(1);
-            }
-            Key::Backspace => {
-                self.delete_char(-1);
-            }
-            Key::Char(ch) => {
-                self.insert_char(ch);
-            }
-            _ => {
-                return false;
-            }
-        };
-        true
-    }
-
-    fn set_data(&mut self, data: WidgetData) {
-        if let WidgetData::Text(text) = data {
-            self.value = text;
-            self.move_cursor(isize::min_value());
-        }
-    }
-
-    fn get_data(&self) -> WidgetData {
-        WidgetData::Text(self.value.clone())
-    }
+/// Value formats.
+#[derive(Clone, PartialEq)]
+pub enum InputFormat {
+    Any,
+    HexStream,
+    HexSigned,
+    HexUnsigned,
+    DecSigned,
+    DecUnsigned,
 }

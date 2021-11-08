@@ -34,46 +34,24 @@ impl Curses {
         nc::endwin();
     }
 
-    /// Clear the whole screen.
-    pub fn clear_screen() {
-        nc::clear();
-    }
-
-    /// Refresh the whole screen.
-    pub fn refresh_screen() {
-        nc::refresh();
-    }
-
-    /// Enable color for all further prints.
-    pub fn color_on(color: Color) {
-        nc::attron(nc::COLOR_PAIR(color as i16));
-    }
-
-    /// Show cursor at specified position.
-    pub fn show_cursor(x: usize, y: usize) {
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        nc::mv(y as i32, x as i32);
-        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_VISIBLE);
-    }
-
-    /// Hide cursor.
-    pub fn hide_cursor() {
-        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
-    }
-
-    /// Get main screen winndow.
-    pub fn get_screen() -> Window {
-        let wnd = nc::stdscr();
-        #[allow(clippy::cast_sign_loss)]
-        Window {
-            x: 0,
-            y: 0,
-            width: nc::getmaxx(wnd) as usize,
-            height: nc::getmaxy(wnd) as usize,
-        }
+    /// Get screen size.
+    ///
+    /// # Return value
+    ///
+    /// Screen size (width, height).
+    pub fn screen_size() -> (usize, usize) {
+        let window = nc::stdscr();
+        (
+            nc::getmaxx(window).unsigned_abs() as usize,
+            nc::getmaxy(window).unsigned_abs() as usize,
+        )
     }
 
     /// Read next event.
+    ///
+    /// # Return value
+    ///
+    /// Event.
     fn read_event() -> Option<Event> {
         match nc::get_wch() {
             Some(nc::WchResult::Char(chr)) => {
@@ -110,6 +88,10 @@ impl Curses {
     }
 
     /// Read next event (blocking).
+    ///
+    /// # Return value
+    ///
+    /// Event.
     pub fn wait_event() -> Event {
         loop {
             if let Some(event) = Curses::read_event() {
@@ -119,6 +101,10 @@ impl Curses {
     }
 
     /// Read next event (non blocking).
+    ///
+    /// # Return value
+    ///
+    /// Event.
     pub fn peek_event() -> Option<Event> {
         nc::timeout(0);
         let event = Curses::read_event();
@@ -325,46 +311,167 @@ pub enum Key {
     Esc,
 }
 
-/// UI Window.
+/// Curses window.
 pub struct Window {
-    // top left corner of the window
-    pub x: usize,
-    pub y: usize,
-    // size of the window
-    pub width: usize,
-    pub height: usize,
+    /// Curses panel.
+    panel: nc::PANEL,
 }
+
 impl Window {
-    /// Print text on the window.
-    pub fn print(&self, x: usize, y: usize, text: &str) {
-        debug_assert!(x <= self.width);
-        debug_assert!(y <= self.height);
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        nc::mvaddstr((self.y + y) as i32, (self.x + x) as i32, text);
+    /// Create new window.
+    ///
+    /// # Arguments
+    ///
+    /// * `width` - window width
+    /// * `height` - window height
+    /// * `color` - background color of the window
+    ///
+    /// # Return value
+    ///
+    /// Window instance.
+    pub fn new(width: usize, height: usize, color: Color) -> Self {
+        debug_assert!(width > 0);
+        debug_assert!(height > 0);
+
+        // get screen size
+        let screen = nc::stdscr();
+        let screen_width = nc::getmaxx(screen);
+        let screen_height = nc::getmaxy(screen);
+        debug_assert!(width <= screen_width as usize);
+        debug_assert!(height <= screen_height as usize);
+
+        // calculate window position, almost center of the screen
+        let x = screen_width / 2 - width as i32 / 2;
+        let y = (screen_height as f32 / 2.5) as i32 - height as i32 / 2;
+
+        // create curses entities
+        let window = nc::newwin(height as i32, width as i32, y, x);
+        let panel = nc::new_panel(window);
+        nc::update_panels();
+
+        // default background
+        nc::wbkgdset(window, nc::COLOR_PAIR(color as i16));
+        nc::werase(window);
+
+        Self { panel }
     }
 
-    /// Colorize the specified range in line.
+    /// Hide the window.
+    pub fn hide(&self) {
+        nc::hide_panel(self.panel);
+    }
+
+    /// Get window size.
+    ///
+    /// # Return value
+    ///
+    /// Size of the window (width,height).
+    pub fn get_size(&self) -> (usize, usize) {
+        let window = nc::panel_window(self.panel);
+        (
+            nc::getmaxx(window).unsigned_abs() as usize,
+            nc::getmaxy(window).unsigned_abs() as usize,
+        )
+    }
+
+    /// Resize the window.
+    ///
+    /// # Arguments
+    ///
+    /// * `width` - window width
+    /// * `height` - window height
+    pub fn resize(&mut self, width: usize, height: usize) {
+        let window = nc::panel_window(self.panel);
+        nc::wresize(window, height as i32, width as i32);
+    }
+
+    /// Move window.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - absolute screen coordinates: column number
+    /// * `y` - absolute screen coordinates: line number
+    pub fn set_pos(&self, x: usize, y: usize) {
+        let window = nc::panel_window(self.panel);
+        nc::mvwin(window, y as i32, x as i32);
+    }
+
+    /// Print text on the window.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - start column of the text
+    /// * `y` - line number
+    /// * `text` - text to print
+    pub fn print(&self, x: usize, y: usize, text: &str) {
+        let window = nc::panel_window(self.panel);
+        debug_assert!(x <= nc::getmaxx(window) as usize);
+        debug_assert!(y <= nc::getmaxy(window) as usize);
+        nc::mvwaddstr(window, y as i32, x as i32, text);
+    }
+
+    /// Colorize the specified range.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - start column
+    /// * `y` - line number
+    /// * `width` - number of characters to colorize
+    /// * `color` - color to set
     pub fn color(&self, x: usize, y: usize, width: usize, color: Color) {
-        debug_assert!(x <= self.width);
-        debug_assert!(y <= self.height);
-        debug_assert!(x + width <= self.width);
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        nc::mvchgat(
-            (self.y + y) as i32,
-            (self.x + x) as i32,
-            width as i32,
-            0,
-            color as i16,
-        );
+        let window = nc::panel_window(self.panel);
+        debug_assert!(x <= nc::getmaxx(window) as usize);
+        debug_assert!(y <= nc::getmaxy(window) as usize);
+        debug_assert!(width <= nc::getmaxx(window) as usize);
+        nc::mvwchgat(window, y as i32, x as i32, width as i32, 0, color as i16);
+    }
+
+    /// Set color for further prints.
+    ///
+    /// # Arguments
+    ///
+    /// * `color` - color to set
+    pub fn color_on(&self, color: Color) {
+        let window = nc::panel_window(self.panel);
+        nc::wattron(window, nc::COLOR_PAIR(color as i16));
+    }
+
+    /// Refresh the window, flushes all changes to the screen.
+    pub fn refresh(&self) {
+        let window = nc::panel_window(self.panel);
+        nc::wrefresh(window);
+    }
+
+    /// Show cursor at specified position.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - column number
+    /// * `y` - line number
+    pub fn show_cursor(&self, x: usize, y: usize) {
+        let window = nc::panel_window(self.panel);
+        // wmove doesn't work, use absolute coordinates
+        let x = nc::getbegx(window) + x as i32;
+        let y = nc::getbegy(window) + y as i32;
+        nc::mv(y, x);
+        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_VISIBLE);
+    }
+
+    /// Hide cursor.
+    pub fn hide_cursor() {
+        nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
     }
 }
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        nc::del_panel(self.panel);
+        nc::update_panels();
+    }
+}
+
 impl Default for Window {
     fn default() -> Self {
-        Self {
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 0,
-        }
+        Window::new(1, 1, Color::HexNormal)
     }
 }

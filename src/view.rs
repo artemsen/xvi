@@ -3,7 +3,7 @@
 
 use super::ascii::Table;
 use super::config::Config;
-use super::curses::{Color, Curses, Window};
+use super::curses::{Color, Window};
 use super::document::Document;
 use std::collections::BTreeSet;
 use unicode_segmentation::UnicodeSegmentation;
@@ -41,14 +41,29 @@ pub struct View {
 }
 
 impl View {
-    const FIXED_WIDTH: usize = 4; // number of words per line in fixed mode
-    const HEX_LEN: usize = 2; // length of a byte in hex representation
-    const FIELD_MARGIN: usize = 3; // margin size between fields offset/hex/ascii
-    const BYTE_MARGIN: usize = 1; // margin between bytes in a word
-    const WORD_MARGIN: usize = 2; // margin between word
-    const BYTES_IN_WORD: usize = 4; // number of bytes in a single word
+    /// Number of words per line in fixed mode.
+    const FIXED_WIDTH: usize = 4;
+    /// Length of a byte in hex representation.
+    const HEX_LEN: usize = 2;
+    /// Margin size between fields offset/hex/ascii.
+    const FIELD_MARGIN: usize = 3;
+    /// Margin between bytes in a word.
+    const BYTE_MARGIN: usize = 1;
+    /// Margin between word.
+    const WORD_MARGIN: usize = 2;
+    /// Number of bytes in a single word.
+    const BYTES_IN_WORD: usize = 4;
 
     /// Create new viewer instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - application config
+    /// * `file_size` - file size
+    ///
+    /// # Return value
+    ///
+    /// Viewer instance.
     pub fn new(config: &Config, file_size: u64) -> Self {
         Self {
             fixed_width: config.fixed_width,
@@ -66,13 +81,16 @@ impl View {
         }
     }
 
-    /// Recalculate the view scheme.
+    /// Window resize handler: recalculate the view scheme.
     ///
     /// # Arguments
     ///
-    /// * `parent` - parent window
-    pub fn resize(&mut self, parent: Window) {
-        self.window = parent;
+    /// * `y` - start line on the screen
+    /// * `width` - size of the viewer
+    /// * `height` - size of the viewer
+    pub fn resize(&mut self, y: usize, width: usize, height: usize) {
+        self.window.resize(width, height);
+        self.window.set_pos(0, y);
 
         // define size of the offset field
         self.offset_width = 4; // minimum 4 digits (u16)
@@ -100,7 +118,7 @@ impl View {
             let word_width = hex_width + ascii_width;
 
             // available space
-            let mut free_space = self.window.width - self.offset_width - View::FIELD_MARGIN;
+            let mut free_space = width - self.offset_width - View::FIELD_MARGIN;
             if self.ascii_table.is_some() {
                 free_space -= View::FIELD_MARGIN - View::WORD_MARGIN;
             } else {
@@ -111,7 +129,7 @@ impl View {
             free_space / word_width
         };
 
-        self.lines = self.window.height - 1 /* status bar */;
+        self.lines = height - 1 /* status bar */;
         self.columns = words * View::BYTES_IN_WORD;
 
         // calculate hex field size
@@ -121,8 +139,7 @@ impl View {
 
         // increase the offset length if possible
         if self.offset_width < 8 {
-            let mut free_space =
-                self.window.width - self.offset_width - View::FIELD_MARGIN - self.hex_width;
+            let mut free_space = width - self.offset_width - View::FIELD_MARGIN - self.hex_width;
             if self.ascii_table.is_some() {
                 free_space -= View::FIELD_MARGIN + self.columns;
             }
@@ -143,7 +160,11 @@ impl View {
             self.draw_ascii(doc);
         }
         self.highlight(doc);
+        self.window.refresh();
     }
+
+    //pub fn show_cursor(&self, cursor:& Cursor) {
+    //}
 
     /// Print the status bar.
     ///
@@ -170,8 +191,9 @@ impl View {
             percent = percent
         );
 
+        let (width, _) = self.window.get_size();
         let right_len = stat.graphemes(true).count();
-        let left_len = self.window.width - right_len;
+        let left_len = width - right_len;
 
         // left part: path to the file and modifcation status
         let mut path = doc.file.path.clone();
@@ -191,8 +213,8 @@ impl View {
         }
 
         // draw status bar
-        Curses::color_on(Color::StatusBar);
         let statusbar = format!("{:<width$}{}", path, stat, width = left_len);
+        self.window.color_on(Color::StatusBar);
         self.window.print(0, 0, &statusbar);
     }
 
@@ -202,7 +224,7 @@ impl View {
     ///
     /// * `doc` - document to render
     fn draw_offset(&self, doc: &Document) {
-        Curses::color_on(Color::OffsetNormal);
+        self.window.color_on(Color::OffsetNormal);
         let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
 
         for y in 0..self.lines {
@@ -211,12 +233,12 @@ impl View {
                 break;
             }
             if cursor_y == y {
-                Curses::color_on(Color::OffsetHi);
+                self.window.color_on(Color::OffsetHi);
             }
             let line = format!("{:0width$x}", offset, width = self.offset_width);
             self.window.print(0, y + 1 /*status bar*/, &line);
             if cursor_y == y {
-                Curses::color_on(Color::OffsetNormal);
+                self.window.color_on(Color::OffsetNormal);
             }
         }
     }
@@ -227,7 +249,7 @@ impl View {
     ///
     /// * `doc` - document to render
     fn draw_hex(&self, doc: &Document) {
-        Curses::color_on(Color::HexNormal);
+        self.window.color_on(Color::HexNormal);
 
         let cursor_x = (doc.cursor.offset % self.columns as u64) as usize;
         let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
@@ -259,11 +281,11 @@ impl View {
             };
 
             if cursor_y == y {
-                Curses::color_on(Color::HexHi);
+                self.window.color_on(Color::HexHi);
             }
             self.window.print(left_pos, display_y, &text);
             if cursor_y == y {
-                Curses::color_on(Color::HexNormal);
+                self.window.color_on(Color::HexNormal);
             } else {
                 // highlight current column
                 let col_x = left_pos
@@ -281,7 +303,7 @@ impl View {
     ///
     /// * `doc` - document to render
     fn draw_ascii(&self, doc: &Document) {
-        Curses::color_on(Color::AsciiNormal);
+        self.window.color_on(Color::AsciiNormal);
 
         let cursor_x = (doc.cursor.offset % self.columns as u64) as usize;
         let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
@@ -311,11 +333,11 @@ impl View {
             };
 
             if cursor_y == y {
-                Curses::color_on(Color::AsciiHi);
+                self.window.color_on(Color::AsciiHi);
             }
             self.window.print(left_pos, display_y, &text);
             if cursor_y == y {
-                Curses::color_on(Color::AsciiNormal);
+                self.window.color_on(Color::AsciiNormal);
             } else {
                 // highlight current column
                 let col_x = left_pos + cursor_x;

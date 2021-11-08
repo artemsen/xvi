@@ -2,7 +2,7 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
-use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
+use super::widget::{InputFormat, InputLine, StandardButton, WidgetType};
 
 /// "Save as" dialog.
 pub struct SaveAsDialog {
@@ -12,6 +12,9 @@ pub struct SaveAsDialog {
 }
 
 impl SaveAsDialog {
+    /// Width of the dialog.
+    const WIDTH: usize = 40;
+
     /// Show the "Save As" dialog.
     ///
     /// # Arguments
@@ -23,28 +26,28 @@ impl SaveAsDialog {
     /// New file name.
     pub fn show(default: String) -> Option<String> {
         // create dialog
-        let mut dlg = Dialog::new(40 + Dialog::PADDING_X * 2, 6, DialogType::Normal, "Save as");
-
-        dlg.add_next(Text::new("File name:"));
-        let path = dlg.add_next(Edit::new(40, default, EditFormat::Any));
-
+        let mut dlg = Dialog::new(SaveAsDialog::WIDTH, 2, DialogType::Normal, "Save as");
+        // file path input
+        dlg.add_line(WidgetType::StaticText("File name:".to_string()));
+        let edit = InputLine::new(default, InputFormat::Any, Vec::new(), SaveAsDialog::WIDTH);
+        let path = dlg.add_line(WidgetType::Edit(edit));
         // buttons
-        let btn_ok = dlg.add_button(Button::std(StdButton::Ok, true));
-        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
+        let btn_ok = dlg.add_button(StandardButton::OK, true);
+        let btn_cancel = dlg.add_button(StandardButton::Cancel, false);
 
+        // construct dialog handler
         let mut handler = Self {
             path,
             btn_ok,
             btn_cancel,
         };
-
         handler.on_item_change(&mut dlg, handler.path);
 
         // run dialog
         if let Some(id) = dlg.run(&mut handler) {
             if id != handler.btn_cancel {
-                if let WidgetData::Text(value) = dlg.get(handler.path) {
-                    return Some(value);
+                if let WidgetType::Edit(widget) = dlg.get_widget(handler.path) {
+                    return Some(widget.get_value().to_string());
                 }
             }
         }
@@ -53,18 +56,17 @@ impl SaveAsDialog {
 }
 
 impl DialogHandler for SaveAsDialog {
-    fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool {
-        current == self.btn_cancel || dialog.is_enabled(self.btn_ok)
+    fn on_close(&mut self, dialog: &mut Dialog, item: ItemId) -> bool {
+        item == self.btn_cancel || dialog.get_context(self.btn_ok).enabled
     }
 
     fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
         if item == self.path {
-            let is_ok = if let WidgetData::Text(value) = dialog.get(self.path) {
-                !value.is_empty()
-            } else {
-                false
+            let is_ok = match dialog.get_widget(self.path) {
+                WidgetType::Edit(widget) => !widget.get_value().is_empty(),
+                _ => true,
             };
-            dialog.set_state(self.btn_ok, is_ok);
+            dialog.set_enabled(self.btn_ok, is_ok);
         }
     }
 }

@@ -3,7 +3,7 @@
 
 use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
 use super::range::RangeControl;
-use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
+use super::widget::{InputFormat, InputLine, StandardButton, WidgetType};
 use std::ops::Range;
 
 /// "Fill fange" dialog.
@@ -29,8 +29,8 @@ impl FillDialog {
     pub fn show(offset: u64, max: u64, pattern: &[u8]) -> Option<(Range<u64>, Vec<u8>)> {
         // create dialog
         let mut dlg = Dialog::new(
-            RangeControl::DIALOG_WIDTH + Dialog::PADDING_X * 2,
-            10,
+            RangeControl::DIALOG_WIDTH,
+            6,
             DialogType::Normal,
             "Fill range",
         );
@@ -40,18 +40,21 @@ impl FillDialog {
 
         // pattern
         dlg.add_separator();
-        dlg.add_next(Text::new("Fill pattern:"));
+        dlg.add_line(WidgetType::StaticText("Fill with pattern:".to_string()));
         let text = pattern.iter().map(|b| format!("{:02x}", b)).collect();
-        let pattern = dlg.add_next(Edit::new(
-            RangeControl::DIALOG_WIDTH,
+        let widget = InputLine::new(
             text,
-            EditFormat::HexStream,
-        ));
+            InputFormat::HexStream,
+            Vec::new(),
+            RangeControl::DIALOG_WIDTH,
+        );
+        let pattern = dlg.add_line(WidgetType::Edit(widget));
 
         // buttons
-        let btn_ok = dlg.add_button(Button::std(StdButton::Ok, true));
-        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
+        let btn_ok = dlg.add_button(StandardButton::OK, true);
+        let btn_cancel = dlg.add_button(StandardButton::Cancel, false);
 
+        // construct dialog handler
         let mut handler = Self {
             rctl,
             pattern,
@@ -72,7 +75,8 @@ impl FillDialog {
 
     /// Get current sequence from the pattern field.
     fn get_pattern(&self, dialog: &Dialog) -> Vec<u8> {
-        if let WidgetData::Text(mut value) = dialog.get(self.pattern) {
+        if let WidgetType::Edit(widget) = dialog.get_widget(self.pattern) {
+            let mut value = widget.get_value().to_string();
             if !value.is_empty() {
                 if value.len() % 2 != 0 {
                     value.push('0');
@@ -88,23 +92,24 @@ impl FillDialog {
 }
 
 impl DialogHandler for FillDialog {
-    fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool {
-        current == self.btn_cancel || dialog.is_enabled(self.btn_ok)
+    fn on_close(&mut self, dialog: &mut Dialog, item: ItemId) -> bool {
+        item == self.btn_cancel || dialog.get_context(self.btn_ok).enabled
     }
 
     fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
         self.rctl.on_item_change(dialog, item);
-        dialog.set_state(self.btn_ok, self.rctl.get(dialog).is_some());
+        dialog.set_enabled(self.btn_ok, self.rctl.get(dialog).is_some());
     }
 
     fn on_focus_lost(&mut self, dialog: &mut Dialog, item: ItemId) {
         if item == self.pattern {
-            if let WidgetData::Text(mut value) = dialog.get(self.pattern) {
+            if let WidgetType::Edit(widget) = dialog.get_widget_mut(self.pattern) {
+                let mut value = widget.get_value().to_string();
                 if value.is_empty() {
-                    dialog.set(self.pattern, WidgetData::Text("00".to_string()));
+                    widget.set_value("00".to_string());
                 } else if value.len() % 2 != 0 {
                     value.push('0');
-                    dialog.set(self.pattern, WidgetData::Text(value));
+                    widget.set_value(value);
                 }
             }
         } else {

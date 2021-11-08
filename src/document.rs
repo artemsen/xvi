@@ -3,8 +3,7 @@
 
 use super::changes::ChangeList;
 use super::config::Config;
-use super::curses::Window;
-use super::cursor::{Cursor, Direction};
+use super::cursor::{Cursor, Direction, HalfByte, Place};
 use super::file::File;
 use super::view::View;
 use std::io;
@@ -117,15 +116,16 @@ impl Document {
         }
     }
 
-    /// Resize view.
-    ///
-    /// # Arguments
-    ///
-    /// * `parent` - parent window
-    pub fn resize(&mut self, parent: Window) {
-        self.view.resize(parent);
-        if !self.move_cursor(&Direction::Absolute(self.cursor.offset)) {
-            self.update();
+    /// Show cursor.
+    pub fn show_cursor(&self) {
+        if let Some((mut x, y)) = self
+            .view
+            .get_position(self.cursor.offset, self.cursor.place == Place::Hex)
+        {
+            if self.cursor.half == HalfByte::Right {
+                x += 1;
+            }
+            self.view.window.show_cursor(x, y);
         }
     }
 

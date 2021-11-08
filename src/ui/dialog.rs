@@ -2,179 +2,99 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::super::curses::{Color, Curses, Event, Key, KeyPress, Window};
-use super::widget::{Border, Button, Separator, Widget, WidgetData};
+use super::widget::{Button, StandardButton, WidgetContext, WidgetType};
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Dialog window.
 pub struct Dialog {
-    /// Dialog size and position.
-    wnd: Window,
-    /// Items on the dialog window.
+    /// Dialog window.
+    window: Window,
+    /// Dialog items.
     items: Vec<DialogItem>,
-    /// Last used line number (used for easy dialog construction).
-    pub last_line: usize,
+    /// Last used line number used by constructor.
+    lcline: usize,
     /// Currently focused item.
-    pub focus: ItemId,
-    /// Dialog type (background color).
-    dtype: DialogType,
+    focus: ItemId,
+    /// Title.
+    title: String,
 }
 
 impl Dialog {
-    const MARGIN_X: usize = 3;
-    const MARGIN_Y: usize = 1;
-    pub const PADDING_X: usize = 2;
-    pub const PADDING_Y: usize = 1;
+    // Size of the field between window edge and border
+    const BORDER_X: usize = 3;
+    const BORDER_Y: usize = 1;
+    // Size of the padding
+    pub const PADDING_X: usize = Dialog::BORDER_X + 2;
+    pub const PADDING_Y: usize = Dialog::BORDER_Y + 1;
 
-    /// Create new dialog instance.
+    /// Create new dialog.
+    ///
+    /// # Arguments
+    ///
+    /// * `width` - width of the useful area
+    /// * `height` - height of the useful area
+    /// * `dt` - dialog type, used for setting background color
+    /// * `title` - dialog title
+    ///
+    /// # Return value
+    ///
+    /// Dialog instance.
     pub fn new(width: usize, height: usize, dt: DialogType, title: &str) -> Self {
-        // calculate dialogs's window size and position
-        let screen = Curses::get_screen();
-        let dlg_width = width + Dialog::MARGIN_X * 2;
-        let dlg_height = height + Dialog::MARGIN_Y * 2;
-        #[allow(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            clippy::cast_precision_loss
-        )]
-        let wnd = Window {
-            x: screen.width / 2 - dlg_width / 2,
-            y: (screen.height as f32 / 2.5) as usize - dlg_height / 2,
-            width: dlg_width,
-            height: dlg_height,
+        // dialog size with borders
+        let width = width + Dialog::PADDING_X * 2;
+        let height = height + Dialog::PADDING_Y * 2 + 2 /* buttons with separator */;
+
+        // dialog color from type
+        let color = if dt == DialogType::Normal {
+            Color::DialogNormal
+        } else {
+            Color::DialogError
         };
 
-        // initial items: border with separator
-        let border = DialogItem {
-            wnd: Window {
-                x: 0,
-                y: 0,
-                width,
-                height,
-            },
-            enabled: true,
-            widget: Border::new(title),
-        };
+        // separator above buttons block
         let separator = DialogItem {
-            wnd: Window {
-                x: 0,
-                y: height - 3,
-                width,
-                height: 1,
+            widget: WidgetType::Separator {},
+            context: WidgetContext {
+                x: Dialog::BORDER_X,
+                y: height - Dialog::PADDING_Y - 2,
+                width: width - Dialog::BORDER_X * 2,
+                ..WidgetContext::default()
             },
-            enabled: true,
-            widget: Separator::new(None),
         };
 
         Self {
-            wnd,
-            items: vec![border, separator],
-            last_line: Dialog::PADDING_Y,
+            window: Window::new(width, height, color),
+            items: vec![separator],
+            lcline: Dialog::PADDING_Y,
             focus: ItemId::MAX,
-            dtype: dt,
+            title: format!(" {} ", title),
         }
     }
 
-    /// Construct dialog: add new item.
-    pub fn add(&mut self, wnd: Window, widget: Box<dyn Widget>) -> ItemId {
-        self.items.push(DialogItem {
-            wnd,
-            enabled: true,
-            widget,
-        });
-        self.items.len() as ItemId - 1
+    /// Get size of the dialog exclude borders and padding.
+    ///
+    /// # Return value
+    ///
+    /// Size of the useful area.
+    pub fn get_size(&self) -> (usize, usize) {
+        let (mut width, mut height) = self.window.get_size();
+        width -= Dialog::PADDING_X * 2;
+        height -= Dialog::PADDING_Y * 2;
+        (width, height)
     }
 
-    /// Construct dialog: add one lined item to the next row.
-    pub fn add_next(&mut self, widget: Box<dyn Widget>) -> ItemId {
-        let wnd = Window {
-            x: Dialog::PADDING_X,
-            y: self.last_line,
-            width: self.wnd.width - (Dialog::MARGIN_X + Dialog::PADDING_X) * 2,
-            height: 1,
-        };
-        self.last_line += 1;
-        self.add(wnd, widget)
-    }
-
-    /// Construct dialog: add one lined item to the next row at the center.
-    pub fn add_center(&mut self, width: usize, widget: Box<dyn Widget>) -> ItemId {
-        let center = (self.wnd.width - (Dialog::MARGIN_X * 2)) / 2;
-        let wnd = Window {
-            x: center - width / 2,
-            y: self.last_line,
-            width,
-            height: 1,
-        };
-        self.last_line += 1;
-        self.add(wnd, widget)
-    }
-
-    /// Construct dialog: add horizontal separator to the next row.
-    pub fn add_separator(&mut self) {
-        let wnd = Window {
-            x: 0,
-            y: self.last_line,
-            width: self.wnd.width - Dialog::MARGIN_X * 2,
-            height: 1,
-        };
-        self.last_line += 1;
-        self.add(wnd, Separator::new(None));
-    }
-
-    /// Construct dialog: add button to the main block (Ok, Cancel, etc).
-    pub fn add_button(&mut self, button: Box<Button>) -> ItemId {
-        let y = self.wnd.height - (Dialog::MARGIN_Y + Dialog::PADDING_Y) * 2;
-        let width = button.text.len();
-        let center = (self.wnd.width - (Dialog::MARGIN_X * 2)) / 2;
-        let x = if self.items.iter().any(|i| i.wnd.y == y) {
-            // total width of the items on the same line
-            let mut total_width = width;
-            for item in self.items.iter().filter(|i| i.wnd.y == y) {
-                total_width += item.wnd.width + 1 /* space */;
-            }
-            // move items on the same line to the left
-            let mut x = center - total_width / 2;
-            for item in self.items.iter_mut().filter(|i| i.wnd.y == y) {
-                item.wnd.x = x;
-                x += item.wnd.width + 1 /* space */;
-            }
-            x
-        } else {
-            center - width / 2
-        };
-        let wnd = Window {
-            x,
-            y,
-            width,
-            height: 1,
-        };
-        self.add(wnd, button)
-    }
-
-    /// Get item's data.
-    pub fn get(&self, id: ItemId) -> WidgetData {
-        self.items[id as usize].widget.as_ref().get_data()
-    }
-
-    /// Set item's data.
-    pub fn set(&mut self, id: ItemId, data: WidgetData) {
-        self.items[id as usize].widget.as_mut().set_data(data);
-    }
-
-    /// Check item state.
-    pub fn is_enabled(&self, id: ItemId) -> bool {
-        self.items[id as usize].enabled
-    }
-
-    /// Enable or disable item.
-    pub fn set_state(&mut self, id: ItemId, state: bool) {
-        self.items[id as usize].enabled = state;
-    }
-
-    /// Run dialog: show window and handle external events.
+    /// Run dialog: show window and handle input events.
+    ///
+    /// # Arguments
+    ///
+    /// * `handler` - dialog custom handlers
+    ///
+    /// # Return value
+    ///
+    /// Last focused item Id or None if Esc pressed.
     pub fn run(&mut self, handler: &mut dyn DialogHandler) -> Option<ItemId> {
-        // set focus to the first available widget
         if self.focus == ItemId::MAX {
-            self.move_focus(true);
+            self.initialize_focus();
         }
 
         // main event handler loop
@@ -188,8 +108,11 @@ impl Dialog {
                 Event::KeyPress(event) => {
                     match event.key {
                         Key::Tab => {
-                            let previous = self.move_focus(event.modifier != KeyPress::SHIFT);
-                            handler.on_focus_lost(self, previous);
+                            if let Some(previous) =
+                                self.move_focus(event.modifier != KeyPress::SHIFT)
+                            {
+                                handler.on_focus_lost(self, previous);
+                            }
                         }
                         Key::Esc => {
                             return None;
@@ -201,14 +124,17 @@ impl Dialog {
                         }
                         _ => {
                             if self.focus != ItemId::MAX {
-                                if self.items[self.focus as usize].widget.keypress(&event) {
+                                let item = &mut self.items[self.focus];
+                                if item.widget.key_press(&event) {
                                     handler.on_item_change(self, self.focus);
                                 } else if event.key == Key::Left || event.key == Key::Up {
-                                    let previous = self.move_focus(false);
-                                    handler.on_focus_lost(self, previous);
+                                    if let Some(previous) = self.move_focus(false) {
+                                        handler.on_focus_lost(self, previous);
+                                    }
                                 } else if event.key == Key::Right || event.key == Key::Down {
-                                    let previous = self.move_focus(true);
-                                    handler.on_focus_lost(self, previous);
+                                    if let Some(previous) = self.move_focus(true) {
+                                        handler.on_focus_lost(self, previous);
+                                    }
                                 }
                             }
                         }
@@ -224,98 +150,297 @@ impl Dialog {
         self.run(&mut dummy)
     }
 
-    /// Draw dialog.
-    pub fn draw(&self) {
-        Curses::color_on(if self.dtype == DialogType::Normal {
-            Color::DialogNormal
+    /// Hide dialog window.
+    pub fn hide(&self) {
+        self.window.hide();
+    }
+
+    /// Get item widget instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - item Id
+    ///
+    /// # Return value
+    ///
+    /// Widget instance.
+    pub fn get_widget(&self, item: ItemId) -> &WidgetType {
+        &self.items[item].widget
+    }
+
+    /// Get mutable item widget instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - item Id
+    ///
+    /// # Return value
+    ///
+    /// Mutable widget instance.
+    pub fn get_widget_mut(&mut self, item: ItemId) -> &mut WidgetType {
+        &mut self.items[item].widget
+    }
+
+    /// Get item context.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - item Id
+    ///
+    /// # Return value
+    ///
+    /// Context of the item.
+    pub fn get_context(&self, item: ItemId) -> &WidgetContext {
+        &self.items[item].context
+    }
+
+    /// Enable or disable item.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - item Id
+    /// * `state` - new state to set
+    pub fn set_enabled(&mut self, item: ItemId, state: bool) {
+        self.items[item].context.enabled = state;
+    }
+
+    /// Add new widget onto dialog window.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - widget position
+    /// * `y` - widget position
+    /// * `width` - widget width
+    /// * `widget` - widget to add
+    ///
+    /// # Return value
+    ///
+    /// Item Id of added widget.
+    pub fn add(&mut self, x: usize, y: usize, width: usize, widget: WidgetType) -> ItemId {
+        let context = WidgetContext {
+            x,
+            y,
+            width,
+            ..WidgetContext::default()
+        };
+        self.items.push(DialogItem { widget, context });
+        self.items.len() as ItemId - 1
+    }
+
+    /// Add new widget on the next line on dialog window.
+    ///
+    /// # Arguments
+    ///
+    /// * `widget` - widget to add
+    ///
+    /// # Return value
+    ///
+    /// Item Id of added widget.
+    pub fn add_line(&mut self, widget: WidgetType) -> ItemId {
+        let (width, _) = self.get_size();
+        let line = self.lcline;
+        self.lcline += 1;
+        self.add(Dialog::PADDING_X, line, width, widget)
+    }
+
+    /// Add centered text on the next line on dialog window.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - static text to add
+    pub fn add_center(&mut self, text: String) {
+        debug_assert!(!text.is_empty());
+        let (width, _) = self.get_size();
+        let len = text.graphemes(true).count();
+        debug_assert!(len <= width);
+        let x = Dialog::PADDING_X + width / 2 - len / 2;
+        let line = self.lcline;
+        self.lcline += 1;
+        self.add(x, line, len, WidgetType::StaticText(text));
+    }
+
+    /// Add standart button on dialog.
+    ///
+    /// # Arguments
+    ///
+    /// * `button` - button to add
+    /// * `default` - default button flag
+    ///
+    /// # Return value
+    ///
+    /// Item Id of added widget.
+    pub fn add_button(&mut self, button: StandardButton, default: bool) -> ItemId {
+        let text = button.text(default);
+
+        let (width, height) = self.get_size();
+        let btn_width = text.len();
+        let btn_y = height + Dialog::PADDING_Y - 1;
+        let mut btn_x = Dialog::PADDING_X;
+
+        // total width of buttons on the same line
+        let mut total_width = btn_width;
+        for item in self.items.iter().filter(|i| i.context.y == btn_y) {
+            total_width += item.context.width + 1 /* space */;
+        }
+        debug_assert!(total_width <= width);
+
+        // calculate position of the button
+        let center = width / 2 - total_width / 2;
+        if total_width == btn_width {
+            btn_x += center;
         } else {
-            Color::DialogError
-        });
-
-        // background
-        let spaces = (0..self.wnd.width).map(|_| " ").collect::<String>();
-        for y in 0..self.wnd.height {
-            self.wnd.print(0, y, &spaces);
+            // move items on the same line to the left
+            let mut move_x = center;
+            for item in self.items.iter_mut().filter(|i| i.context.y == btn_y) {
+                item.context.x = Dialog::PADDING_X + move_x;
+                move_x += item.context.width + 1 /* space */;
+            }
+            btn_x += move_x;
         }
 
-        // shadow
-        let screen = Curses::get_screen();
-        for y in (self.wnd.y + 1)..(self.wnd.y + self.wnd.height) {
-            screen.color(self.wnd.x + self.wnd.width, y, 2, Color::DialogShadow);
-        }
-        screen.color(
-            self.wnd.x + 2,
-            self.wnd.y + self.wnd.height,
-            self.wnd.width,
-            Color::DialogShadow,
+        let widget = WidgetType::Button(Button { text, default });
+        self.add(btn_x, btn_y, btn_width, widget)
+    }
+
+    /// Add separator in the nect line on dialog window.
+    pub fn add_separator(&mut self) {
+        let (mut width, _) = self.window.get_size();
+        width -= Dialog::BORDER_X * 2;
+        let line = self.lcline;
+        self.lcline += 1;
+        self.add(Dialog::BORDER_X, line, width, WidgetType::Separator {});
+    }
+
+    /// Draw dialog window.
+    pub fn draw(&self) {
+        // draw border
+        let (mut width, mut height) = self.window.get_size();
+        width -= Dialog::BORDER_X * 2;
+        height -= Dialog::BORDER_Y * 2;
+        // top and bottom lines with corners
+        self.window.print(
+            Dialog::BORDER_X,
+            Dialog::BORDER_Y,
+            &format!("\u{2554}{:\u{2550}^1$}\u{2557}", &self.title, width - 2),
         );
+        self.window.print(
+            Dialog::BORDER_X,
+            Dialog::BORDER_Y + height - 1,
+            &format!("\u{255a}{:\u{2550}^1$}\u{255d}", "", width - 2),
+        );
+        // left and right lines
+        for y in Dialog::BORDER_Y + 1..Dialog::BORDER_Y + height - 1 {
+            self.window.print(Dialog::BORDER_X, y, "\u{2551}");
+            self.window
+                .print(Dialog::BORDER_X + width - 1, y, "\u{2551}");
+        }
 
         // dialog items
         let mut cursor: Option<(usize, usize)> = None;
-        for (index, item) in self.items.iter().enumerate() {
-            let subcan = Window {
-                x: self.wnd.x + item.wnd.x + Dialog::MARGIN_X,
-                y: self.wnd.y + item.wnd.y + Dialog::MARGIN_Y,
-                width: item.wnd.width,
-                height: item.wnd.height,
-            };
-            let cursor_x = item
-                .widget
-                .draw(index == self.focus as usize, item.enabled, &subcan);
-            if let Some(x) = cursor_x {
-                cursor = Some((subcan.x + x, subcan.y));
+        for item in &self.items {
+            if let Some((x, y)) = item.widget.draw(&self.window, &item.context) {
+                cursor = Some((x, y));
             }
         }
         if let Some((x, y)) = cursor {
-            Curses::show_cursor(x, y);
+            self.window.show_cursor(x, y);
         } else {
-            Curses::hide_cursor();
+            Window::hide_cursor();
         }
+
+        self.window.refresh();
     }
 
-    /// Move the focus to the next/previous widget, returns previously focused item Id.
-    fn move_focus(&mut self, forward: bool) -> ItemId {
-        debug_assert!(!self.items.is_empty());
+    /// Set focus to the next windget.
+    ///
+    /// # Arguments
+    ///
+    /// * `forward` - focus movement direction
+    ///
+    /// # Return value
+    ///
+    /// Previously focus (item that lost the focus).
+    fn move_focus(&mut self, forward: bool) -> Option<ItemId> {
+        debug_assert_ne!(self.focus, ItemId::MAX);
 
-        let mut focus = if self.focus == ItemId::MAX {
-            // first launch, focues wasn't set yet
-            self.items.len() as ItemId - 1
-        } else {
-            self.focus
-        };
-
-        let mut lap = false;
-
+        let mut focus = self.focus;
         loop {
             if forward {
                 focus += 1;
                 if focus == self.items.len() as ItemId {
-                    if lap {
-                        return ItemId::MAX; // no one focusable items
-                    }
-                    lap = true;
                     focus = 0;
                 }
             } else {
                 if focus == 0 {
-                    if lap {
-                        return ItemId::MAX; // no one focusable items
-                    }
-                    lap = true;
                     focus = self.items.len() as ItemId;
                 }
                 focus -= 1;
             }
 
-            if self.items[focus as usize].enabled && self.items[focus as usize].widget.focusable() {
+            let item = &self.items[focus];
+            if item.context.enabled && item.widget.focusable() {
                 break;
             }
         }
 
-        let previous = self.focus;
-        self.focus = focus;
-        self.items[focus as usize].widget.focus();
-        previous
+        if focus != self.focus {
+            let previous = self.focus;
+
+            let item = &mut self.items[self.focus];
+            item.context.focused = false;
+
+            self.focus = focus;
+
+            let item = &mut self.items[self.focus];
+            item.context.focused = true;
+            item.widget.focus_set();
+
+            return Some(previous);
+        }
+        None
+    }
+
+    /// Set initial focus.
+    fn initialize_focus(&mut self) {
+        debug_assert_eq!(self.focus, ItemId::MAX);
+
+        // find the first focusable widget
+        for (index, item) in self.items.iter().enumerate() {
+            if item.context.enabled && item.widget.focusable() {
+                self.focus = index;
+                break;
+            }
+        }
+
+        debug_assert_ne!(self.focus, ItemId::MAX); // no one focusable item?
+
+        // if focus is inside the buttons block then set it to default button
+        if let WidgetType::Button(_) = &self.items[self.focus].widget {
+            for (index, item) in self.items.iter().skip(self.focus).enumerate() {
+                if let WidgetType::Button(widget) = &item.widget {
+                    if widget.default {
+                        self.focus += index;
+                        break;
+                    }
+                }
+            }
+        }
+
+        let item = &mut self.items[self.focus];
+        item.context.focused = true;
+        item.widget.focus_set();
+    }
+
+    /// Get max size of a dialog.
+    ///
+    /// # Return value
+    ///
+    /// Max size (width, height) of useful area (exclude borders).
+    pub fn max_size() -> (usize, usize) {
+        let (screen_width, screen_height) = Curses::screen_size();
+        let width = screen_width - Dialog::PADDING_X * 2;
+        let height = screen_height - Dialog::PADDING_Y * 2 - 2 /* buttons + separator */;
+        (width, height)
     }
 }
 
@@ -331,9 +456,8 @@ pub type ItemId = usize;
 
 /// Single dialog item.
 pub struct DialogItem {
-    wnd: Window,
-    enabled: bool,
-    widget: Box<dyn Widget>,
+    widget: WidgetType,
+    context: WidgetContext,
 }
 
 /// Dialog handlers.
@@ -343,12 +467,12 @@ pub trait DialogHandler {
     /// # Arguments
     ///
     /// * `dialog` - dialog instance
-    /// * `current` - currently focused item Id
+    /// * `item` - currently focused item Id
     ///
     /// # Return value
     ///
     /// true if dialog can be closed.
-    fn on_close(&mut self, _dialog: &mut Dialog, _current: ItemId) -> bool {
+    fn on_close(&mut self, _dialog: &mut Dialog, _item: ItemId) -> bool {
         true
     }
 

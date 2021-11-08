@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::super::curses::Window;
 use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
-use super::widget::{Button, Edit, EditFormat, StdButton, Text, WidgetData};
+use super::widget::{InputFormat, InputLine, StandardButton, WidgetType};
 
 /// "Insert bytes" dialog.
 pub struct InsertDialog {
@@ -15,6 +14,9 @@ pub struct InsertDialog {
 }
 
 impl InsertDialog {
+    /// Width of the dialog.
+    const WIDTH: usize = 42;
+
     /// Show the "Insert bytes" configuration dialog.
     ///
     /// # Arguments
@@ -27,55 +29,57 @@ impl InsertDialog {
     /// Start offset, number of bytes to insert and pattern to fill.
     pub fn show(offset: u64, pattern: &[u8]) -> Option<(u64, u64, Vec<u8>)> {
         // create dialog
-        let mut dlg = Dialog::new(46, 10, DialogType::Normal, "Insert bytes");
+        let mut dlg = Dialog::new(InsertDialog::WIDTH, 7, DialogType::Normal, "Insert bytes");
 
-        dlg.add_next(Text::new("Insert        bytes at offset"));
+        dlg.add_line(WidgetType::StaticText(
+            "Insert        bytes at offset".to_string(),
+        ));
 
         // length
-        let wnd = Window {
-            x: 9,
-            y: dlg.last_line - 1,
-            width: 6,
-            height: 1,
-        };
-        let widget = Edit::new(wnd.width, "1".to_string(), EditFormat::DecUnsigned);
-        let length = dlg.add(wnd, widget);
+        let widget = InputLine::new("1".to_string(), InputFormat::DecUnsigned, Vec::new(), 6);
+        let length = dlg.add(
+            Dialog::PADDING_X + 7,
+            Dialog::PADDING_Y,
+            6,
+            WidgetType::Edit(widget),
+        );
 
         // start offset
-        let wnd = Window {
-            x: 32,
-            y: dlg.last_line - 1,
-            width: 12,
-            height: 1,
-        };
-        let widget = Edit::new(wnd.width, format!("{:x}", offset), EditFormat::DecUnsigned);
-        let offset = dlg.add(wnd, widget);
-
-        dlg.add_separator();
+        let widget = InputLine::new(
+            format!("{:x}", offset),
+            InputFormat::HexUnsigned,
+            Vec::new(),
+            12,
+        );
+        let offset = dlg.add(
+            Dialog::PADDING_X + 30,
+            Dialog::PADDING_Y,
+            12,
+            WidgetType::Edit(widget),
+        );
 
         // pattern
-        dlg.add_next(Text::new("Fill with pattern:"));
+        dlg.add_separator();
+        dlg.add_line(WidgetType::StaticText("Fill with pattern:".to_string()));
         let text = pattern.iter().map(|b| format!("{:02x}", b)).collect();
-        let wnd = Window {
-            x: 21,
-            y: dlg.last_line - 1,
-            width: 23,
-            height: 1,
-        };
-        let widget = Edit::new(wnd.width, text, EditFormat::HexStream);
-        let pattern = dlg.add(wnd, widget);
+        let widget = InputLine::new(
+            text,
+            InputFormat::HexStream,
+            Vec::new(),
+            InsertDialog::WIDTH,
+        );
+        let pattern = dlg.add_line(WidgetType::Edit(widget));
 
         // warning message
         dlg.add_separator();
-        let msg_title = "WARNING!";
-        dlg.add_center(msg_title.len(), Text::new(msg_title));
-        let msg_text = "This operation cannot be undone!";
-        dlg.add_center(msg_text.len(), Text::new(msg_text));
+        dlg.add_center("WARNING!".to_string());
+        dlg.add_center("This operation cannot be undone!".to_string());
 
         // buttons
-        let btn_ok = dlg.add_button(Button::std(StdButton::Ok, true));
-        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
+        let btn_ok = dlg.add_button(StandardButton::OK, true);
+        let btn_cancel = dlg.add_button(StandardButton::Cancel, false);
 
+        // construct dialog handler
         let mut handler = Self {
             length,
             offset,
@@ -87,14 +91,14 @@ impl InsertDialog {
         // run dialog
         if let Some(id) = dlg.run(&mut handler) {
             if id != handler.btn_cancel {
-                let length = if let WidgetData::Text(value) = dlg.get(handler.length) {
-                    value.parse::<u64>().unwrap_or(0)
+                let length = if let WidgetType::Edit(widget) = dlg.get_widget(handler.length) {
+                    widget.get_value().parse::<u64>().unwrap_or(0)
                 } else {
                     0
                 };
                 debug_assert_ne!(length, 0);
-                let offset = if let WidgetData::Text(value) = dlg.get(handler.offset) {
-                    u64::from_str_radix(&value, 16).unwrap_or(0)
+                let offset = if let WidgetType::Edit(widget) = dlg.get_widget(handler.offset) {
+                    u64::from_str_radix(widget.get_value(), 16).unwrap_or(0)
                 } else {
                     0
                 };
@@ -107,7 +111,8 @@ impl InsertDialog {
 
     /// Get current sequence from the pattern field.
     fn get_pattern(&self, dialog: &Dialog) -> Vec<u8> {
-        if let WidgetData::Text(mut value) = dialog.get(self.pattern) {
+        if let WidgetType::Edit(widget) = dialog.get_widget(self.pattern) {
+            let mut value = widget.get_value().to_string();
             if !value.is_empty() {
                 if value.len() % 2 != 0 {
                     value.push('0');
@@ -123,33 +128,34 @@ impl InsertDialog {
 }
 
 impl DialogHandler for InsertDialog {
-    fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool {
-        current == self.btn_cancel || dialog.is_enabled(self.btn_ok)
+    fn on_close(&mut self, dialog: &mut Dialog, item: ItemId) -> bool {
+        item == self.btn_cancel || dialog.get_context(self.btn_ok).enabled
     }
 
     fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
         if item == self.length {
-            if let WidgetData::Text(value) = dialog.get(self.length) {
-                let is_valid = value.parse::<u64>().unwrap_or(0) != 0;
-                dialog.set_state(self.btn_ok, is_valid);
+            if let WidgetType::Edit(widget) = dialog.get_widget(self.length) {
+                let is_valid = widget.get_value().parse::<u64>().unwrap_or(0) != 0;
+                dialog.set_enabled(self.btn_ok, is_valid);
             }
         }
     }
 
     fn on_focus_lost(&mut self, dialog: &mut Dialog, item: ItemId) {
         if item == self.length || item == self.offset {
-            if let WidgetData::Text(value) = dialog.get(item) {
-                if value.is_empty() {
-                    dialog.set(item, WidgetData::Text("0".to_string()));
+            if let WidgetType::Edit(widget) = dialog.get_widget_mut(item) {
+                if widget.get_value().is_empty() {
+                    widget.set_value("0".to_string());
                 }
             }
         } else if item == self.pattern {
-            if let WidgetData::Text(mut value) = dialog.get(self.pattern) {
+            if let WidgetType::Edit(widget) = dialog.get_widget_mut(self.pattern) {
+                let mut value = widget.get_value().to_string();
                 if value.is_empty() {
-                    dialog.set(self.pattern, WidgetData::Text("00".to_string()));
+                    widget.set_value("00".to_string());
                 } else if value.len() % 2 != 0 {
                     value.push('0');
-                    dialog.set(self.pattern, WidgetData::Text(value));
+                    widget.set_value(value);
                 }
             }
         }

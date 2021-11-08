@@ -2,7 +2,7 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::dialog::{Dialog, DialogHandler, DialogType, ItemId};
-use super::widget::{Button, Checkbox, Edit, EditFormat, StdButton, Text, WidgetData};
+use super::widget::{CheckBox, InputFormat, InputLine, StandardButton, WidgetType};
 
 /// "Search sequence" dialog.
 pub struct SearchDialog {
@@ -13,6 +13,8 @@ pub struct SearchDialog {
 }
 
 impl SearchDialog {
+    /// Width of the dialog.
+    const WIDTH: usize = 40;
     /// Character used for non-printable values in the ASCII field.
     const NPCHAR: char = '·';
 
@@ -28,41 +30,53 @@ impl SearchDialog {
     /// Search sequence and direction.
     pub fn show(sequences: &[Vec<u8>], backward: bool) -> Option<(Vec<u8>, bool)> {
         // create dialog
-        let mut dlg = Dialog::new(40 + Dialog::PADDING_X * 2, 10, DialogType::Normal, "Search");
+        let mut dlg = Dialog::new(SearchDialog::WIDTH, 6, DialogType::Normal, "Search");
 
         // hex sequence
-        dlg.add_next(Text::new("Hex sequence to search:"));
-        let init = if sequences.is_empty() {
-            String::new()
-        } else {
-            sequences[0].iter().map(|b| format!("{:02x}", b)).collect()
-        };
-        let mut hex_widget = Edit::new(40, init, EditFormat::HexStream);
-        hex_widget.history = sequences
+        dlg.add_line(WidgetType::StaticText(
+            "Hex sequence to search:".to_string(),
+        ));
+        let history: Vec<String> = sequences
             .iter()
             .map(|s| s.iter().map(|b| format!("{:02x}", b)).collect())
             .collect();
-        let hex = dlg.add_next(hex_widget);
+        let init = if history.is_empty() {
+            String::new()
+        } else {
+            history[0].clone()
+        };
+        let widget = InputLine::new(init, InputFormat::HexStream, history, SearchDialog::WIDTH);
+        let hex = dlg.add_line(WidgetType::Edit(widget));
 
         // ascii sequence
-        dlg.add_next(Text::new("ASCII:"));
-        let ascii = dlg.add_next(Edit::new(40, String::new(), EditFormat::Any));
+        dlg.add_line(WidgetType::StaticText("ASCII:".to_string()));
+        let widget = InputLine::new(
+            String::new(),
+            InputFormat::Any,
+            Vec::new(),
+            SearchDialog::WIDTH,
+        );
+        let ascii = dlg.add_line(WidgetType::Edit(widget));
 
         // search direction
         dlg.add_separator();
-        let bkg_checkbox = dlg.add_next(Checkbox::new("Backward search", backward));
+        let widget = CheckBox {
+            state: backward,
+            title: "Backward search".to_string(),
+        };
+        let bkg = dlg.add_line(WidgetType::CheckBox(widget));
 
         // buttons
-        let btn_ok = dlg.add_button(Button::std(StdButton::Ok, true));
-        let btn_cancel = dlg.add_button(Button::std(StdButton::Cancel, false));
+        let btn_ok = dlg.add_button(StandardButton::OK, true);
+        let btn_cancel = dlg.add_button(StandardButton::Cancel, false);
 
+        // construct dialog handler
         let mut handler = Self {
             hex,
             ascii,
             btn_ok,
             btn_cancel,
         };
-
         handler.on_item_change(&mut dlg, handler.hex);
 
         // run dialog
@@ -70,8 +84,8 @@ impl SearchDialog {
             if id != handler.btn_cancel {
                 let seq = handler.get_sequence(&dlg).unwrap();
                 debug_assert!(!seq.is_empty());
-                let dir = if let WidgetData::Bool(value) = dlg.get(bkg_checkbox) {
-                    value
+                let dir = if let WidgetType::CheckBox(widget) = dlg.get_widget(bkg) {
+                    widget.state
                 } else {
                     backward
                 };
@@ -84,7 +98,9 @@ impl SearchDialog {
     /// Get current sequence from the hex field.
     fn get_sequence(&self, dialog: &Dialog) -> Option<Vec<u8>> {
         let mut result = None;
-        if let WidgetData::Text(mut value) = dialog.get(self.hex) {
+
+        if let WidgetType::Edit(widget) = dialog.get_widget(self.hex) {
+            let mut value = widget.get_value().to_string();
             if !value.is_empty() {
                 if value.len() % 2 != 0 {
                     value.push('0');
@@ -102,8 +118,8 @@ impl SearchDialog {
 }
 
 impl DialogHandler for SearchDialog {
-    fn on_close(&mut self, dialog: &mut Dialog, current: ItemId) -> bool {
-        current == self.btn_cancel || dialog.is_enabled(self.btn_ok)
+    fn on_close(&mut self, dialog: &mut Dialog, item: ItemId) -> bool {
+        item == self.btn_cancel || dialog.get_context(self.btn_ok).enabled
     }
 
     fn on_item_change(&mut self, dialog: &mut Dialog, item: ItemId) {
@@ -121,13 +137,16 @@ impl DialogHandler for SearchDialog {
                         }
                     })
                     .collect();
-                dialog.set(self.ascii, WidgetData::Text(ascii));
+                if let WidgetType::Edit(widget) = dialog.get_widget_mut(self.ascii) {
+                    widget.set_value(ascii);
+                }
                 is_ok = !hex.is_empty();
             }
         } else if item == self.ascii {
             // set hex text from the ASCII field
-            if let WidgetData::Text(ascii) = dialog.get(self.ascii) {
-                let hex: String = ascii
+            if let WidgetType::Edit(widget) = dialog.get_widget(self.ascii) {
+                let hex: String = widget
+                    .get_value()
                     .chars()
                     .map(|b| {
                         format!(
@@ -141,20 +160,24 @@ impl DialogHandler for SearchDialog {
                     })
                     .collect();
                 is_ok = !hex.is_empty();
-                dialog.set(self.hex, WidgetData::Text(hex));
+                if let WidgetType::Edit(widget) = dialog.get_widget_mut(self.hex) {
+                    widget.set_value(hex);
+                }
             }
         } else {
             is_ok = true;
         }
-        dialog.set_state(self.btn_ok, is_ok);
+
+        dialog.set_enabled(self.btn_ok, is_ok);
     }
 
     fn on_focus_lost(&mut self, dialog: &mut Dialog, item: ItemId) {
         if item == self.hex {
-            if let WidgetData::Text(mut value) = dialog.get(self.hex) {
+            if let WidgetType::Edit(widget) = dialog.get_widget_mut(self.hex) {
+                let mut value = widget.get_value().to_string();
                 if !value.is_empty() && value.len() % 2 != 0 {
                     value.push('0');
-                    dialog.set(self.hex, WidgetData::Text(value));
+                    widget.set_value(value);
                 }
             }
         }

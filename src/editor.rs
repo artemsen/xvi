@@ -16,16 +16,18 @@ use super::ui::progress::ProgressDialog;
 use super::ui::saveas::SaveAsDialog;
 use super::ui::search::SearchDialog;
 use super::ui::setup::SetupDialog;
-use super::ui::widget::StdButton;
+use super::ui::widget::StandardButton;
 use std::collections::BTreeSet;
 
 /// Editor: implements business logic of a hex editor.
-#[allow(dead_code)]
 pub struct Editor {
     /// Editable documents.
     documents: Vec<Document>,
     /// Index of currently selected document.
     current: usize,
+
+    /// Keybar window.
+    keybar: Window,
 
     /// Search history.
     search_history: Vec<Vec<u8>>,
@@ -45,6 +47,7 @@ impl Editor {
         config: &Config,
     ) -> Result<Self, std::io::Error> {
         let history = History::default();
+        let keybar = Window::default();
 
         // create document instances
         let mut documents = Vec::with_capacity(files.len());
@@ -56,6 +59,7 @@ impl Editor {
         let mut instance = Self {
             documents,
             current: 0,
+            keybar,
             search_history: history.get_search(),
             search_backward: false,
             goto_history: history.get_goto(),
@@ -441,11 +445,10 @@ impl Editor {
 
     /// Draw editor.
     fn draw(&self) {
-        // draw documents
-        self.documents.iter().for_each(|doc| doc.view.draw(doc));
+        Window::hide_cursor();
 
         // draw key bar (bottom Fn line).
-        let screen = Curses::get_screen();
+        let (width, _) = self.keybar.get_size();
         let titles = &[
             "Help",   // F1
             "Save",   // F2
@@ -459,55 +462,46 @@ impl Editor {
             "Exit",   // F10
         ];
         let mut fn_line = String::new();
-        let width = screen.width / 10;
+        let fn_width = width / 10;
         for i in 0_usize..10 {
             fn_line += &format!(
                 "{:>2}{:<width$}",
                 i + 1,
                 titles[i as usize],
-                width = width - 2
+                width = fn_width - 2
             );
         }
-        screen.print(0, screen.height - 1, &fn_line);
-        screen.color(0, screen.height - 1, screen.width, Color::KeyBarTitle);
+        self.keybar.print(0, 0, &fn_line);
+        self.keybar.color(0, 0, width, Color::KeyBarTitle);
         for i in 0..10 {
-            screen.color(i * width, screen.height - 1, 2, Color::KeyBarId);
+            self.keybar.color(i * fn_width, 0, 2, Color::KeyBarId);
         }
+        self.keybar.refresh();
 
-        // show cursor
-        let doc = &self.documents[self.current];
-        if let Some((mut x, y)) = doc
-            .view
-            .get_position(doc.cursor.offset, doc.cursor.place == Place::Hex)
-        {
-            if doc.cursor.half == HalfByte::Right {
-                x += 1;
-            }
-            Curses::show_cursor(doc.view.window.x + x, doc.view.window.y + y);
-        }
+        // draw documents
+        self.documents.iter().for_each(|doc| doc.view.draw(doc));
+        // show cursor for current document
+        self.documents[self.current].show_cursor();
     }
 
     /// Screen resize handler.
     fn resize(&mut self) {
-        Curses::clear_screen();
-        let mut screen = Curses::get_screen();
-        screen.height -= 1; // key bar
+        let (scr_width, scr_height) = Curses::screen_size();
+        self.keybar.resize(scr_width, 1);
+        self.keybar.set_pos(0, scr_height - 1);
 
-        let height = screen.height / self.documents.len();
+        let workspace_height = scr_height - 1; // key bar
+        let view_height = workspace_height / self.documents.len();
         let last_index = self.documents.len() - 1;
         for (index, doc) in self.documents.iter_mut().enumerate() {
-            let wnd = Window {
-                x: screen.x,
-                y: index * height,
-                width: screen.width,
-                height: if index == last_index {
-                    screen.height - height * last_index //enlarge last window to fit the screen
-                } else {
-                    height
-                },
+            let y = index * view_height;
+            // enlarge last window to fit the screen
+            let height = if index == last_index {
+                workspace_height - view_height * last_index
+            } else {
+                view_height
             };
-
-            doc.resize(wnd);
+            doc.view.resize(y, scr_width, height);
         }
     }
 
@@ -560,17 +554,19 @@ impl Editor {
 
     /// Show mini help.
     fn help() {
-        MessageBox::new("XVI: Hex editor", DialogType::Normal)
-            .left("Arrows, PgUp, PgDown: move cursor;")
-            .left("Tab: switch between Hex/ASCII;")
-            .left("u or Ctrl+z: undo;")
-            .left("Ctrl+r or Ctrl+y: redo;")
-            .left("F2: save file; Shift+F2: save as;")
-            .left("Esc or F10: exit.")
-            .left("")
-            .center("Read `man xvi` for more info.")
-            .button(StdButton::Ok, true)
-            .show();
+        MessageBox::show(
+            DialogType::Normal,
+            "XVI: Hex editor",
+            &[
+                "Arrows, PgUp, PgDown: move cursor;",
+                "Tab: switch between Hex/ASCII;",
+                "u or Ctrl+z: undo;",
+                "Ctrl+r or Ctrl+y: redo;",
+                "F2: save file; Shift+F2: save as;",
+                "Esc or F10: exit.",
+            ],
+            &[(StandardButton::OK, true)],
+        );
     }
 
     /// Save current file, returns false if operation failed.
@@ -581,15 +577,15 @@ impl Editor {
                     return true;
                 }
                 Err(err) => {
-                    if let Some(btn) = MessageBox::new("Error", DialogType::Error)
-                        .center("Error writing file")
-                        .center(&doc.file.path)
-                        .center(&format!("{}", err))
-                        .button(StdButton::Retry, true)
-                        .button(StdButton::Cancel, false)
-                        .show()
-                    {
-                        if btn != StdButton::Retry {
+                    if let Some(button) = MessageBox::write_error(
+                        &doc.file.path,
+                        &err,
+                        &[
+                            (StandardButton::Retry, true),
+                            (StandardButton::Cancel, false),
+                        ],
+                    ) {
+                        if button != StandardButton::Retry {
                             return false;
                         }
                     } else {
@@ -610,15 +606,15 @@ impl Editor {
                         return true;
                     }
                     Err(err) => {
-                        if let Some(btn) = MessageBox::new("Error", DialogType::Error)
-                            .center("Error writing file")
-                            .center(&new_name)
-                            .center(&format!("{}", err))
-                            .button(StdButton::Retry, true)
-                            .button(StdButton::Cancel, false)
-                            .show()
-                        {
-                            if btn != StdButton::Retry {
+                        if let Some(button) = MessageBox::write_error(
+                            &doc.file.path,
+                            &err,
+                            &[
+                                (StandardButton::Retry, true),
+                                (StandardButton::Cancel, false),
+                            ],
+                        ) {
+                            if button != StandardButton::Retry {
                                 return false;
                             }
                         } else {
@@ -639,7 +635,6 @@ impl Editor {
         ) {
             self.goto_history.retain(|o| o != &offset);
             self.goto_history.insert(0, offset);
-
             self.move_cursor(&Direction::Absolute(offset));
         }
     }
@@ -671,11 +666,13 @@ impl Editor {
             ) {
                 self.move_cursor(&Direction::Absolute(offset));
             } else if !progress.canceled {
-                self.draw();
-                MessageBox::new("Search", DialogType::Error)
-                    .center("Sequence not found!")
-                    .button(StdButton::Ok, true)
-                    .show();
+                progress.hide();
+                MessageBox::show(
+                    DialogType::Error,
+                    "Search",
+                    &["Sequence not found in file", &doc.file.path],
+                    &[(StandardButton::OK, true)],
+                );
             }
         }
     }
@@ -704,12 +701,16 @@ impl Editor {
     fn insert(&mut self) {
         let doc = &self.documents[self.current];
         if doc.file.is_modified() {
-            MessageBox::new("Insert bytes", DialogType::Error)
-                .center(&doc.file.path)
-                .center("was modified.")
-                .center("Please save or undo your changes first.")
-                .button(StdButton::Ok, true)
-                .show();
+            MessageBox::show(
+                DialogType::Error,
+                "Insert bytes",
+                &[
+                    &doc.file.path,
+                    "was modified.",
+                    "Please save or undo your changes first.",
+                ],
+                &[(StandardButton::OK, true)],
+            );
             return;
         }
         if let Some((mut offset, size, pattern)) =
@@ -719,16 +720,11 @@ impl Editor {
             if offset > doc.file.size {
                 offset = doc.file.size;
             }
-            self.draw();
             let mut progress = ProgressDialog::new("Write file...");
             let doc = &mut self.documents[self.current];
             if let Err(err) = doc.file.insert(offset, size, &self.pattern, &mut progress) {
-                MessageBox::new("Error", DialogType::Error)
-                    .center("Error writing file")
-                    .center(&doc.file.path)
-                    .center(&format!("{}", err))
-                    .button(StdButton::Cancel, true)
-                    .show();
+                progress.hide();
+                MessageBox::write_error(&doc.file.path, &err, &[(StandardButton::Cancel, true)]);
             }
             doc.on_file_changed(offset + size as u64);
         }
@@ -738,25 +734,24 @@ impl Editor {
     fn cut(&mut self) {
         let doc = &self.documents[self.current];
         if doc.file.is_modified() {
-            MessageBox::new("Cut range", DialogType::Error)
-                .center(&doc.file.path)
-                .center("was modified.")
-                .center("Please save or undo your changes first.")
-                .button(StdButton::Ok, true)
-                .show();
+            MessageBox::show(
+                DialogType::Error,
+                "Cut range",
+                &[
+                    &doc.file.path,
+                    "was modified.",
+                    "Please save or undo your changes first.",
+                ],
+                &[(StandardButton::OK, true)],
+            );
             return;
         }
         if let Some(range) = CutDialog::show(doc.cursor.offset, doc.file.size) {
-            self.draw();
             let mut progress = ProgressDialog::new("Write file...");
             let doc = &mut self.documents[self.current];
             if let Err(err) = doc.file.cut(&range, &mut progress) {
-                MessageBox::new("Error", DialogType::Error)
-                    .center("Error writing file")
-                    .center(&doc.file.path)
-                    .center(&format!("{}", err))
-                    .button(StdButton::Cancel, true)
-                    .show();
+                progress.hide();
+                MessageBox::write_error(&doc.file.path, &err, &[(StandardButton::Cancel, true)]);
             }
             doc.on_file_changed(range.end);
         }
@@ -784,22 +779,23 @@ impl Editor {
             if !doc.file.is_modified() {
                 continue;
             }
-            if let Some(btn) = MessageBox::new("Exit", DialogType::Error)
-                .center(&doc.file.path)
-                .center("was modified.")
-                .center("Save before exit?")
-                .button(StdButton::Yes, false)
-                .button(StdButton::No, false)
-                .button(StdButton::Cancel, true)
-                .show()
-            {
-                match btn {
-                    StdButton::Yes => {
+            if let Some(button) = MessageBox::show(
+                DialogType::Error,
+                "Exit",
+                &[&doc.file.path, "was modified.", "Save before exit?"],
+                &[
+                    (StandardButton::Yes, false),
+                    (StandardButton::No, false),
+                    (StandardButton::Cancel, true),
+                ],
+            ) {
+                match button {
+                    StandardButton::Yes => {
                         if !Editor::save(doc) {
                             return false;
                         }
                     }
-                    StdButton::Cancel => {
+                    StandardButton::Cancel => {
                         return false;
                     }
                     _ => {}

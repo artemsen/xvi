@@ -1,96 +1,120 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
-use super::dialog::{Dialog, DialogType};
-use super::widget::{Button, StdButton, Text};
-use std::collections::BTreeMap;
+use super::dialog::{Dialog, DialogType, ItemId};
+use super::widget::StandardButton;
+use std::io::Error;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Message box dialog.
-pub struct MessageBox {
-    /// Message text: string and align flag.
-    message: Vec<(String, bool)>,
-    /// Buttons: type and default state.
-    buttons: Vec<(StdButton, bool)>,
-    /// Message type.
-    dtype: DialogType,
-}
+pub struct MessageBox {}
 
 impl MessageBox {
-    /// Create new message box.
-    pub fn new(title: &str, dtype: DialogType) -> Self {
-        Self {
-            message: vec![(String::from(title), true)],
-            buttons: Vec::new(),
-            dtype,
+    /// Show message box.
+    ///
+    /// # Arguments
+    ///
+    /// * `dt` - message type (dialog background)
+    /// * `title` - message title
+    /// * `message` - message lines
+    /// * `buttons` - buttons on the dialog
+    ///
+    /// # Return value
+    ///
+    /// Chosen button.
+    pub fn show(
+        dt: DialogType,
+        title: &str,
+        message: &[&str],
+        buttons: &[(StandardButton, bool)],
+    ) -> Option<StandardButton> {
+        debug_assert!(!message.is_empty());
+        debug_assert!(!buttons.is_empty());
+
+        // create dialog
+        let (width, height) = MessageBox::calc_size(message, buttons);
+        let mut dlg = Dialog::new(width, height, dt, title);
+
+        // add message text to the dialog window
+        for msg in message.iter() {
+            let mut line = msg.to_string();
+            let line_len = line.graphemes(true).count();
+            if line_len > width {
+                // shrink line
+                let (index, _) = line.grapheme_indices(true).nth(width - 1).unwrap();
+                line.truncate(index);
+                line.push('\u{2026}');
+            }
+            dlg.add_center(line);
         }
+
+        // buttons
+        let mut first = ItemId::MAX;
+        for (button, default) in buttons.iter() {
+            let item = dlg.add_button(*button, *default);
+            if first == ItemId::MAX {
+                first = item;
+            }
+        }
+
+        // show dialog
+        dlg.run_simple().map(|id| buttons[id - first].0)
     }
 
-    /// Add text line (left aligned).
-    pub fn left(&mut self, text: &str) -> &mut Self {
-        self.message.push((String::from(text), false));
-        self
+    /// Show message about writing errors.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - path to the file
+    /// * `err` - error description
+    /// * `buttons` - buttons on the dialog
+    ///
+    /// # Return value
+    ///
+    /// Chosen button.
+    pub fn write_error(
+        file: &str,
+        err: &Error,
+        buttons: &[(StandardButton, bool)],
+    ) -> Option<StandardButton> {
+        let error = format!("{}", err);
+        let message = vec!["Error writing file", file, &error];
+        MessageBox::show(DialogType::Error, "Error", &message, buttons)
     }
 
-    /// Add text line (centered).
-    pub fn center(&mut self, text: &str) -> &mut Self {
-        self.message.push((String::from(text), true));
-        self
-    }
+    /// Calculate window size.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - message lines
+    /// * `buttons` - buttons on the dialog
+    ///
+    /// # Return value
+    ///
+    /// Size of the dialog window.
+    fn calc_size(message: &[&str], buttons: &[(StandardButton, bool)]) -> (usize, usize) {
+        let (max_width, max_height) = Dialog::max_size();
 
-    /// Add one of the standard button.
-    pub fn button(&mut self, button: StdButton, default: bool) -> &mut Self {
-        self.buttons.push((button, default));
-        self
-    }
-
-    /// Show message box dialog.
-    pub fn show(&self) -> Option<StdButton> {
         // calculate dialog width
-        let mut buttons_width = 0;
-        for (button, default) in &self.buttons {
-            if buttons_width != 0 {
-                buttons_width += 1; // space between buttons
-            }
-            buttons_width += Button::std(*button, *default).text.len();
+        let mut width = 0;
+
+        // size of buttons block
+        for (button, default) in buttons.iter() {
+            width += 1 + button.text(*default).len();
         }
-        let mut width = buttons_width;
-        for (line, _) in &self.message {
-            if width < line.len() {
-                width = line.len();
+        width -= 1; // remove last space
+
+        // longest message line
+        for msg in message.iter() {
+            let len = msg.len();
+            if width < len {
+                width = len;
             }
         }
-        width += Dialog::PADDING_X * 2;
 
         // calculate dialog height
-        let height = self.message.len() - 1 +
-            Dialog::PADDING_Y * 2 +
-            2 /* buttons with separator */;
+        let height = message.len();
 
-        // construct dialog
-        let mut dlg = Dialog::new(width, height, self.dtype, &self.message.first().unwrap().0);
-        for (text, center) in self.message.iter().skip(1) {
-            let widget = Text::new(text);
-            if *center {
-                dlg.add_center(text.len(), widget);
-            } else {
-                dlg.add_next(widget);
-            }
-        }
-
-        // buttons line
-        let mut button_ids = BTreeMap::new();
-        for &(button, default) in &self.buttons {
-            let btn = Button::std(button, default);
-            let id = dlg.add_button(btn);
-            button_ids.insert(id, button);
-            if default {
-                dlg.focus = id;
-            }
-        }
-
-        if let Some(id) = dlg.run_simple() {
-            return Some(*button_ids.get(&id).unwrap());
-        }
-        None
+        (width.min(max_width), height.min(max_height))
     }
 }
