@@ -571,6 +571,9 @@ impl Editor {
 
     /// Save current file, returns false if operation failed.
     fn save(doc: &mut Document) -> bool {
+        if !doc.file.is_modified() {
+            return true;
+        }
         loop {
             match doc.save() {
                 Ok(()) => {
