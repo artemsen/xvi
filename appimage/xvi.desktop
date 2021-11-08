@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=xvi
+Comment=Hexadecimal editor
+Icon=xvi
+Exec=xvi %F
+Categories=Utility
+Terminal=true
+StartupNotify=false

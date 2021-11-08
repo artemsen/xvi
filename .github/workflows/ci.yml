@@ -1,0 +1,36 @@
+name: CI
+on: [push]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - name: Check out source code
+      uses: actions/checkout@v2.2.0
+      with:
+        fetch-depth: 0
+
+    - name: Get version
+      run: echo "::set-output name=VERSION::$(git describe --always | sed 's/-g.*//;s/^v//;s/-/./')"
+      id: version
+
+    - name: Setup rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Build
+      run: cargo build --release
+
+    - name: Test
+      run: cargo test
+
+    - name: Build AppImage
+      run: ./appimage/build.sh
+
+    - name: Upload AppImage
+      uses: actions/upload-artifact@v2
+      with:
+        name: xvi-${{ steps.version.outputs.VERSION }}-x86_64-appimage
+        path: xvi-${{ steps.version.outputs.VERSION }}-x86_64.AppImage
