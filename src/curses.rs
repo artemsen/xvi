@@ -383,6 +383,8 @@ impl Window {
     pub fn resize(&mut self, width: usize, height: usize) {
         let window = nc::panel_window(self.panel);
         nc::wresize(window, height as i32, width as i32);
+        nc::werase(window);
+        nc::refresh();
     }
 
     /// Move window.

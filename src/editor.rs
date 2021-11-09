@@ -503,6 +503,10 @@ impl Editor {
             };
             doc.view.resize(y, scr_width, height);
         }
+
+        self.move_cursor(&Direction::Absolute(
+            self.documents[self.current].cursor.offset,
+        ));
     }
 
     /// Switch focus between documents and fields:
