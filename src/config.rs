@@ -7,7 +7,7 @@ use super::inifile::IniFile;
 use std::env;
 use std::path::PathBuf;
 
-/// Configuration (user settings).
+/// App configuration.
 pub struct Config {
     /// Line width mode (fixed/dynamic).
     pub fixed_width: bool,

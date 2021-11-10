@@ -2,7 +2,7 @@
 // Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
 
 use super::super::ascii;
-use super::super::view::View;
+use super::super::config::Config;
 use super::dialog::{Dialog, DialogType};
 use super::widget::{CheckBox, ListBox, StandardButton, WidgetType};
 
@@ -14,18 +14,18 @@ impl SetupDialog {
     ///
     /// # Arguments
     ///
-    /// * `view` - viewer instance to set up
+    /// * `params` - parameters to set up
     ///
     /// # Return value
     ///
     /// true if settings were changed
-    pub fn show(view: &mut View) -> bool {
+    pub fn show(config: &mut Config) -> bool {
         // create dialog
         let mut dlg = Dialog::new(27, 4, DialogType::Normal, "Setup");
 
         // fixed width setup
         let checkbox = CheckBox {
-            state: view.fixed_width,
+            state: config.fixed_width,
             title: "Fixed width (16 bytes)".to_string(),
         };
         let fixed = dlg.add_line(WidgetType::CheckBox(checkbox));
@@ -38,7 +38,7 @@ impl SetupDialog {
         tables.push("None (hide)".to_string());
         for (index, table) in ascii::TABLES.iter().enumerate() {
             tables.push(table.name.to_string());
-            if let Some(current) = view.ascii_table {
+            if let Some(current) = config.ascii_table {
                 if current.id == table.id {
                     select = index + 1 /* "None (hide)" */;
                 }
@@ -54,14 +54,14 @@ impl SetupDialog {
         dlg.add_button(StandardButton::OK, true);
         let btn_cancel = dlg.add_button(StandardButton::Cancel, false);
 
-        // run dialog
-        if let Some(id) = dlg.run_simple() {
+        // show dialog
+        if let Some(id) = dlg.show_unmanaged() {
             if id != btn_cancel {
                 if let WidgetType::CheckBox(widget) = dlg.get_widget(fixed) {
-                    view.fixed_width = widget.state;
+                    config.fixed_width = widget.state;
                 }
                 if let WidgetType::ListBox(widget) = dlg.get_widget(ascii) {
-                    view.ascii_table = if widget.current == 0 {
+                    config.ascii_table = if widget.current == 0 {
                         None
                     } else {
                         ascii::TABLES.get(widget.current - 1)

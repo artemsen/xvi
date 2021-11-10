@@ -196,13 +196,17 @@ impl Cursor {
                     }
                 }
             }
-            Direction::Absolute(offset) => {
+            Direction::Absolute(offset, base) => {
                 self.offset = if offset < &view.max_offset {
                     *offset
                 } else {
                     view.max_offset - 1
                 };
                 self.half = HalfByte::Left;
+
+                // try to use desirable base offset
+                new_base = *base;
+
                 if self.offset < new_base || self.offset > new_base + page_size {
                     if self.offset > page_size / 3 {
                         new_base = self.offset - page_size / 3;
@@ -288,6 +292,6 @@ pub enum Direction {
     FileBegin,
     /// End of file.
     FileEnd,
-    /// Absolute offset.
-    Absolute(u64),
+    /// Absolute offset (offset, desirable base offset).
+    Absolute(u64, u64),
 }

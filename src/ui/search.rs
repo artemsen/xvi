@@ -79,8 +79,8 @@ impl SearchDialog {
         };
         handler.on_item_change(&mut dlg, handler.hex);
 
-        // run dialog
-        if let Some(id) = dlg.run(&mut handler) {
+        // show dialog
+        if let Some(id) = dlg.show(&mut handler) {
             if id != handler.btn_cancel {
                 let seq = handler.get_sequence(&dlg).unwrap();
                 debug_assert!(!seq.is_empty());

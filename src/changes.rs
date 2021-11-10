@@ -64,6 +64,24 @@ impl ChangeList {
         real
     }
 
+    /// Get value for specified offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - offset of the value
+    ///
+    /// # Return value
+    ///
+    /// Last value at specified offset
+    pub fn last(&self, offset: u64) -> Option<u8> {
+        for ch in self.changes.iter().rev() {
+            if ch.offset == offset {
+                return Some(ch.new);
+            }
+        }
+        None
+    }
+
     /// Undo the last change.
     ///
     /// Returns description of the undone change.

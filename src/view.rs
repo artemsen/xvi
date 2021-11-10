@@ -4,7 +4,7 @@
 use super::ascii::Table;
 use super::config::Config;
 use super::curses::{Color, Window};
-use super::document::Document;
+use super::editor::Document;
 use std::collections::BTreeSet;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -69,8 +69,8 @@ impl View {
             fixed_width: config.fixed_width,
             ascii_table: config.ascii_table,
             max_offset: file_size,
-            lines: 0,
-            columns: 0,
+            lines: 1,
+            columns: 1,
             window: Window::default(),
             offset_width: 0,
             hex_width: 0,
@@ -81,16 +81,10 @@ impl View {
         }
     }
 
-    /// Window resize handler: recalculate the view scheme.
-    ///
-    /// # Arguments
-    ///
-    /// * `y` - start line on the screen
-    /// * `width` - size of the viewer
-    /// * `height` - size of the viewer
-    pub fn resize(&mut self, y: usize, width: usize, height: usize) {
-        self.window.resize(width, height);
-        self.window.set_pos(0, y);
+    /// Reinitialization.
+    pub fn reinit(&mut self) {
+        let (width, height) = self.window.get_size();
+        self.window.clear();
 
         // define size of the offset field
         self.offset_width = 4; // minimum 4 digits (u16)
@@ -147,6 +141,19 @@ impl View {
         }
     }
 
+    /// Window resize handler: recalculate the view scheme.
+    ///
+    /// # Arguments
+    ///
+    /// * `y` - start line on the screen
+    /// * `width` - size of the viewer
+    /// * `height` - size of the viewer
+    pub fn resize(&mut self, y: usize, width: usize, height: usize) {
+        self.window.resize(width, height);
+        self.window.set_pos(0, y);
+        self.reinit();
+    }
+
     /// Draw the document.
     ///
     /// # Arguments
@@ -162,9 +169,6 @@ impl View {
         self.highlight(doc);
         self.window.refresh();
     }
-
-    //pub fn show_cursor(&self, cursor:& Cursor) {
-    //}
 
     /// Print the status bar.
     ///

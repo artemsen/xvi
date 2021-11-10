@@ -21,7 +21,7 @@ impl InsertDialog {
     ///
     /// # Arguments
     ///
-    /// * `offset` - defualt start offset (current position)
+    /// * `offset` - default start offset (current position)
     /// * `pattern` - default pattern
     ///
     /// # Return value
@@ -88,8 +88,8 @@ impl InsertDialog {
             btn_cancel,
         };
 
-        // run dialog
-        if let Some(id) = dlg.run(&mut handler) {
+        // show dialog
+        if let Some(id) = dlg.show(&mut handler) {
             if id != handler.btn_cancel {
                 let length = if let WidgetType::Edit(widget) = dlg.get_widget(handler.length) {
                     widget.get_value().parse::<u64>().unwrap_or(0)

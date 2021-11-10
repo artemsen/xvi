@@ -324,7 +324,7 @@ impl InputLine {
     ///
     /// # Return value
     ///
-    /// Windget instance.
+    /// Widget instance.
     pub fn new(value: String, format: InputFormat, history: Vec<String>, width: usize) -> Self {
         Self {
             value,
@@ -368,13 +368,7 @@ impl InputLine {
         let visible_end = self.start + ctx.width.min(self.length() - self.start);
         let start = self.char2byte(self.start);
         let end = self.char2byte(visible_end);
-        let mut substr = self.value[start..end].to_string();
-
-        // erase line up to the end
-        let len = substr.graphemes(true).count();
-        if len < self.width {
-            substr += &" ".repeat(self.width - len);
-        }
+        let substr = self.value[start..end].to_string();
 
         // draw
         wnd.print(ctx.x, ctx.y, &substr);

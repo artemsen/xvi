@@ -20,7 +20,7 @@ impl RangeControl {
     pub const DIALOG_WIDTH: usize = 43;
     /// Width of the offset field.
     const OFFSET_WIDTH: usize = 13;
-    /// Width of the lenght field.
+    /// Width of the length field.
     const LENGTH_WIDTH: usize = 9;
 
     pub fn create(dlg: &mut Dialog, default: Range<u64>, max: u64) -> Self {

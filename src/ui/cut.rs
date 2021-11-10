@@ -52,8 +52,8 @@ impl CutDialog {
             btn_cancel,
         };
 
-        // run dialog
-        if let Some(id) = dlg.run(&mut handler) {
+        // show dialog
+        if let Some(id) = dlg.show(&mut handler) {
             if id != handler.btn_cancel {
                 let range = handler.rctl.get(&dlg);
                 debug_assert!(range.is_some());

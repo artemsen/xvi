@@ -74,6 +74,7 @@ impl Curses {
             }
             Some(nc::WchResult::KeyCode(key)) => match key {
                 nc::KEY_RESIZE => {
+                    nc::refresh();
                     return Some(Event::TerminalResize);
                 }
                 _ => {
@@ -383,8 +384,6 @@ impl Window {
     pub fn resize(&mut self, width: usize, height: usize) {
         let window = nc::panel_window(self.panel);
         nc::wresize(window, height as i32, width as i32);
-        nc::werase(window);
-        nc::refresh();
     }
 
     /// Move window.
@@ -396,6 +395,12 @@ impl Window {
     pub fn set_pos(&self, x: usize, y: usize) {
         let window = nc::panel_window(self.panel);
         nc::mvwin(window, y as i32, x as i32);
+    }
+
+    /// Clear the window.
+    pub fn clear(&self) {
+        let window = nc::panel_window(self.panel);
+        nc::werase(window);
     }
 
     /// Print text on the window.

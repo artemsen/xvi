@@ -43,8 +43,8 @@ impl SaveAsDialog {
         };
         handler.on_item_change(&mut dlg, handler.path);
 
-        // run dialog
-        if let Some(id) = dlg.run(&mut handler) {
+        // show dialog
+        if let Some(id) = dlg.show(&mut handler) {
             if id != handler.btn_cancel {
                 if let WidgetType::Edit(widget) = dlg.get_widget(handler.path) {
                     return Some(widget.get_value().to_string());

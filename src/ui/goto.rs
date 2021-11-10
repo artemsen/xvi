@@ -128,8 +128,8 @@ impl GotoDialog {
         };
         handler.on_item_change(&mut dlg, handler.abs_hex);
 
-        // run dialog
-        if let Some(id) = dlg.run(&mut handler) {
+        // show dialog
+        if let Some(id) = dlg.show(&mut handler) {
             if id != btn_cancel {
                 if let WidgetType::Edit(widget) = dlg.get_widget(handler.abs_hex) {
                     return Some(u64::from_str_radix(widget.get_value(), 16).unwrap_or(0));

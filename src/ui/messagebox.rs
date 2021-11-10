@@ -58,7 +58,28 @@ impl MessageBox {
         }
 
         // show dialog
-        dlg.run_simple().map(|id| buttons[id - first].0)
+        dlg.show_unmanaged().map(|id| buttons[id - first].0)
+    }
+
+    /// Show message about reading errors.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - path to the file
+    /// * `err` - error description
+    /// * `buttons` - buttons on the dialog
+    ///
+    /// # Return value
+    ///
+    /// Chosen button.
+    pub fn error_read(
+        file: &str,
+        err: &Error,
+        buttons: &[(StandardButton, bool)],
+    ) -> Option<StandardButton> {
+        let error = format!("{}", err);
+        let message = vec!["Error reading file", file, &error];
+        MessageBox::show(DialogType::Error, "Error", &message, buttons)
     }
 
     /// Show message about writing errors.
@@ -72,7 +93,7 @@ impl MessageBox {
     /// # Return value
     ///
     /// Chosen button.
-    pub fn write_error(
+    pub fn error_write(
         file: &str,
         err: &Error,
         buttons: &[(StandardButton, bool)],
@@ -80,6 +101,31 @@ impl MessageBox {
         let error = format!("{}", err);
         let message = vec!["Error writing file", file, &error];
         MessageBox::show(DialogType::Error, "Error", &message, buttons)
+    }
+
+    /// Show message about writing errors and ask user for retry.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - path to the file
+    /// * `err` - error description
+    ///
+    /// # Return value
+    ///
+    /// 'true` if attempt must be repeated
+    pub fn retry_write(file: &str, err: &Error) -> bool {
+        if let Some(button) = MessageBox::error_write(
+            file,
+            err,
+            &[
+                (StandardButton::Retry, true),
+                (StandardButton::Cancel, false),
+            ],
+        ) {
+            button == StandardButton::Retry
+        } else {
+            false
+        }
     }
 
     /// Calculate window size.

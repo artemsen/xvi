@@ -19,7 +19,7 @@ impl FillDialog {
     ///
     /// # Arguments
     ///
-    /// * `offset` - defualt start offset (current position)
+    /// * `offset` - default start offset (current position)
     /// * `max` - max offset (file size)
     /// * `pattern` - default pattern
     ///
@@ -62,8 +62,8 @@ impl FillDialog {
             btn_cancel,
         };
 
-        // run dialog
-        if let Some(id) = dlg.run(&mut handler) {
+        // show dialog
+        if let Some(id) = dlg.show(&mut handler) {
             if id != handler.btn_cancel {
                 let range = handler.rctl.get(&dlg).unwrap();
                 let pattern = handler.get_pattern(&dlg);

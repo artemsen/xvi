@@ -92,7 +92,7 @@ impl Dialog {
     /// # Return value
     ///
     /// Last focused item Id or None if Esc pressed.
-    pub fn run(&mut self, handler: &mut dyn DialogHandler) -> Option<ItemId> {
+    pub fn show(&mut self, handler: &mut dyn DialogHandler) -> Option<ItemId> {
         if self.focus == ItemId::MAX {
             self.initialize_focus();
         }
@@ -145,9 +145,9 @@ impl Dialog {
     }
 
     /// Show simple dialog without external handlers.
-    pub fn run_simple(&mut self) -> Option<ItemId> {
+    pub fn show_unmanaged(&mut self) -> Option<ItemId> {
         let mut dummy = DialogEmptyHandler {};
-        self.run(&mut dummy)
+        self.show(&mut dummy)
     }
 
     /// Hide dialog window.
@@ -313,6 +313,8 @@ impl Dialog {
 
     /// Draw dialog window.
     pub fn draw(&self) {
+        self.window.clear();
+
         // draw border
         let (mut width, mut height) = self.window.get_size();
         width -= Dialog::BORDER_X * 2;
@@ -451,7 +453,7 @@ pub enum DialogType {
     Error,
 }
 
-/// Type of dialog's item ID.
+/// Type of dialog item ID.
 pub type ItemId = usize;
 
 /// Single dialog item.
