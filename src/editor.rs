@@ -25,13 +25,12 @@ impl Editor {
     /// # Arguments
     ///
     /// * `files` - files to open
-    /// * `offset` - initial offset
     /// * `config` - app configuration
     ///
     /// # Return value
     ///
     /// Group instance.
-    pub fn new(files: &[String], offset: u64, config: &Config) -> io::Result<Self> {
+    pub fn new(files: &[String], config: &Config) -> io::Result<Self> {
         debug_assert!(!files.is_empty());
 
         // open documents
@@ -40,16 +39,10 @@ impl Editor {
             documents.push(Document::new(Path::new(file), config)?);
         }
 
-        // create instance
-        let mut instance = Self {
+        Ok(Self {
             documents,
             current: 0,
-        };
-
-        // apply initial offset
-        instance.move_cursor(&Direction::Absolute(offset, 0));
-
-        Ok(instance)
+        })
     }
 
     /// Get currently focused document.

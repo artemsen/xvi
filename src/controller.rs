@@ -57,18 +57,20 @@ impl Controller {
             offset
         };
 
-        // initialize editor logic and open files
-        let editor = Editor::new(files, initial_offset, &config)?;
-
         // create controller instance
         let mut instance = Self {
-            editor,
+            editor: Editor::new(files, &config)?,
             keybar: Window::default(),
             history,
             config,
         };
 
         instance.resize();
+        if initial_offset != 0 {
+            instance
+                .editor
+                .move_cursor(&Direction::Absolute(initial_offset, 0));
+        }
         instance.main_loop();
 
         Ok(())
@@ -586,8 +588,8 @@ impl Controller {
             );
             return;
         }
-        let mut progress = ProgressDialog::new("Cutting out range...", true);
         if let Some(range) = CutDialog::show(self.editor.current().cursor.offset, file.size) {
+            let mut progress = ProgressDialog::new("Cutting out range...", true);
             if let Err(err) = self.editor.cut(&range, &mut progress) {
                 if err.kind() != ErrorKind::Interrupted {
                     progress.hide();

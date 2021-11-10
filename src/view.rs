@@ -74,7 +74,7 @@ impl View {
             window: Window::default(),
             offset_width: 0,
             hex_width: 0,
-            offset: u64::MAX,
+            offset: 0,
             data: Vec::new(),
             changes: BTreeSet::new(),
             differs: BTreeSet::new(),

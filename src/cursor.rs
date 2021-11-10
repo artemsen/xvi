@@ -237,7 +237,7 @@ impl Cursor {
 impl Default for Cursor {
     fn default() -> Self {
         Self {
-            offset: u64::MAX,
+            offset: 0,
             half: HalfByte::Left,
             place: Place::Hex,
         }
