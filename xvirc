@@ -14,8 +14,9 @@ Ascii = 437
 [Colors]
 # Base color theme (Light or Dark)
 Theme = Dark
-# Custom color setup (foreground, background)
-OffsetNormal =    241, 232
+# Custom color setup (foreground, background), overrides colors from the base theme
+# This is the default configuration for the Dark theme:
+OffsetNormal =    241, 233
 OffsetHi =        250, 235
 HexNormal =       247, 233
 HexHi =           250, 235
@@ -25,7 +26,7 @@ HexDiff =         124, 233
 HexDiffHi =       160, 235
 AsciiNormal =     241, 233
 AsciiHi =         250, 235
-AsciiModified =   142, 233
+AsciiModified =   220, 233
 AsciiModifiedHi = 220, 235
 AsciiDiff =       124, 233
 AsciiDiffHi =     160, 235
