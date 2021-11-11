@@ -27,4 +27,4 @@ cargo build --release
 ## Install
 
 - Arch users can install the program via [AUR](https://aur.archlinux.org/packages/xvi-git);
-- AppImage is available as an artifact of [CI workflow](https://github.com/artemsen/xvi/actions).
+- AppImage is available in [Releases](https://github.com/artemsen/xvi/releases).
