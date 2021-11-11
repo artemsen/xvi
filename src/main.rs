@@ -90,6 +90,7 @@ fn print_version() {
         "XVI - hexadecimal editor ver.{}.",
         env!("CARGO_PKG_VERSION")
     );
+    println!("Homepage: {}", env!("CARGO_PKG_HOMEPAGE"));
 }
 
 /// Print usage info.

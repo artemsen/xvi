@@ -3,6 +3,7 @@ name = "xvi"
 version = "1.0.0"
 authors = ["Artem Senichev <artemsen@gmail.com>"]
 edition = "2018"
+homepage = "https://github.com/artemsen/xvi"
 
 [dependencies]
 ncurses = { version = "5.101.0", features = ["wide", "panel"] }
