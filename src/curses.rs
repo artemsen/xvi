@@ -162,6 +162,7 @@ impl Curses {
             0x215 => Some(KeyPress::new(Key::End, KeyPress::ALT | KeyPress::CTRL)),
             nc::KEY_BTAB => Some(KeyPress::new(Key::Tab, KeyPress::SHIFT)),
             nc::KEY_DC => Some(KeyPress::new(Key::Delete, KeyPress::NONE)),
+            nc::KEY_BACKSPACE => Some(KeyPress::new(Key::Backspace, KeyPress::NONE)),
             _ => {
                 // check for Fn range
                 if (nc::KEY_F1..nc::KEY_F1 + 64).contains(&code) {
