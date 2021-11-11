@@ -7,7 +7,7 @@ use super::cursor::{Direction, HalfByte, Place};
 use super::editor::{Editor, Focus};
 use super::history::History;
 use super::ui::cut::CutDialog;
-use super::ui::dialog::DialogType;
+use super::ui::dialog::{Dialog, DialogType};
 use super::ui::fill::FillDialog;
 use super::ui::goto::GotoDialog;
 use super::ui::insert::InsertDialog;
@@ -414,19 +414,17 @@ impl Controller {
 
     /// Show mini help.
     fn help() {
-        MessageBox::show(
-            DialogType::Normal,
-            "XVI: Hex editor",
-            &[
-                "Arrows, PgUp, PgDown: move cursor;",
-                "Tab: switch between Hex/ASCII;",
-                "u or Ctrl+z: undo;",
-                "Ctrl+r or Ctrl+y: redo;",
-                "F2: save file; Shift+F2: save as;",
-                "Esc or F10: exit.",
-            ],
-            &[(StandardButton::OK, true)],
-        );
+        let mut dlg = Dialog::new(44, 8, DialogType::Normal, "XVI");
+        dlg.add_center("Use arrows, PgUp, PgDown to move cursor.".to_string());
+        dlg.add_center("Use Ctrl-z or u for undo,".to_string());
+        dlg.add_center("Ctrl-r or Ctrl-y for redo.".to_string());
+        dlg.add_center("Use Tab to switch between fields and files.".to_string());
+        dlg.add_center("F1-F10 are described in the screen bottom.".to_string());
+        dlg.add_separator();
+        dlg.add_center(format!("XVI v.{}", env!("CARGO_PKG_VERSION")));
+        dlg.add_center(env!("CARGO_PKG_HOMEPAGE").to_string());
+        dlg.add_button(StandardButton::OK, true);
+        dlg.show_unmanaged();
     }
 
     /// Save current file, returns false if operation failed.
