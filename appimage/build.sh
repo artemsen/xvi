@@ -18,6 +18,7 @@ cd "${THIS_DIR}/.."
 # build the project
 cargo build --release
 install -D -m 755 "${THIS_DIR}/../target/release/xvi" "${APP_DIR}/usr/bin/xvi"
+install -D -m 644 "${THIS_DIR}/xvi.appdata.xml" "${APP_DIR}/usr/share/metainfo/xvi.appdata.xml"
 
 # download appimage builder
 if [ ! -e "${APP_IMG}" ]; then

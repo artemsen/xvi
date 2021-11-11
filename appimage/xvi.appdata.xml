@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>xvi</id>
+  <project_license>MIT</project_license>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>XVI</name>
+  <summary>Hex editor with ncurses based user interface</summary>
+
+  <description>
+    <p>Features:</p>
+    <ul>
+      <li>Low resource utilization, minimum dependencies;</li>
+      <li>Support for some VIM keyboard shortcuts (hjkl, :, /, etc);</li>
+      <li>Visual diff between several files;</li>
+      <li>Highlighting the current position and changed data;</li>
+      <li>Insert bytes into the middle of the file;</li>
+      <li>Cutting bytes from the middle of the file;</li>
+      <li>Filling the range with a pattern;</li>
+      <li>Undo/redo support;</li>
+      <li>Search and goto;</li>
+      <li>Customizable UI colors.</li>
+    </ul>
+  </description>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Dark theme</caption>
+      <image>https://github.com/artemsen/xvi/blob/appimg/.github/screenshot1.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Light theme</caption>
+      <image>https://github.com/artemsen/xvi/blob/appimg/.github/screenshot2.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/artemsen/xvi</url>
+
+  <content_rating type="oars-1.1"/>
+  <launchable type="desktop-id">xvi.desktop</launchable>
+  <provides>
+    <binary>xvi</binary>
+  </provides>
+
+  <releases>
+    <release version="1.1.0" date="2021-11-11"/>
+    <release version="1.0.0" date="2021-05-21"/>
+  </releases>
+</component>

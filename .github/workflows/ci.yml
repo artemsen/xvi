@@ -3,9 +3,13 @@ on: [push]
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-18.04
 
     steps:
+    - name: Install dependencies
+      run: >
+          sudo apt install --no-install-recommends --yes libncursesw5-dev
+
     - name: Check out source code
       uses: actions/checkout@v2.2.0
       with:
