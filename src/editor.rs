@@ -386,8 +386,8 @@ impl Editor {
 
         current.view.max_offset = current.file.size;
 
-        let offset = current.view.offset;
-        self.move_cursor(&Direction::Absolute(offset + size, offset));
+        let view_offset = current.view.offset;
+        self.move_cursor(&Direction::Absolute(offset + size, view_offset));
         self.refresh();
 
         Ok(())
@@ -485,6 +485,15 @@ pub struct Document {
 
 impl Document {
     /// Create new document instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - path to the file to open
+    /// * `config` - app configuration
+    ///
+    /// # Return value
+    ///
+    /// Document instance.
     fn new(path: &Path, config: &Config) -> io::Result<Self> {
         let file = File::open(path)?;
         let file_size = file.size;
@@ -497,6 +506,15 @@ impl Document {
         })
     }
 
+    /// Move cursor.
+    ///
+    /// # Arguments
+    ///
+    /// * `dir` - move direction
+    ///
+    /// # Return value
+    ///
+    /// `true` if new base address was set
     fn move_cursor(&mut self, dir: &Direction) -> bool {
         let new_base = self.cursor.move_to(dir, &self.view);
         let base_changed = new_base != self.view.offset;
@@ -506,6 +524,7 @@ impl Document {
         }
         base_changed
     }
+
     /// Update currently displayed page.
     fn refresh(&mut self) {
         self.file.changes = self.changes.get();
