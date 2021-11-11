@@ -33,6 +33,11 @@ pub struct Controller {
 }
 
 impl Controller {
+    /// Min width of the screen.
+    pub const MIN_WIDTH: usize = 60;
+    /// Min height of the screen.
+    pub const MIN_HEIGHT: usize = 16;
+
     /// Run controller.
     ///
     /// # Arguments
@@ -368,14 +373,15 @@ impl Controller {
         ];
         let mut fn_line = String::new();
         let fn_width = width / 10;
-        for i in 0_usize..10 {
-            fn_line += &format!(
-                "{:>2}{:<width$}",
-                i + 1,
-                titles[i as usize],
-                width = fn_width - 2
-            );
+        let max_name = fn_width - 2 /* fn number */;
+        for (i, name) in titles.iter().enumerate() {
+            let mut name = name.to_string();
+            if name.len() > max_name {
+                name.truncate(max_name);
+            }
+            fn_line += &format!("{:>2}{:<width$}", i + 1, name, width = max_name);
         }
+        fn_line += &" ".repeat(width - fn_line.len());
         self.keybar.print(0, 0, &fn_line);
         self.keybar.color(0, 0, width, Color::KeyBarTitle);
         for i in 0..10 {
@@ -390,6 +396,17 @@ impl Controller {
     /// Screen resize handler.
     fn resize(&mut self) {
         let (width, height) = Curses::screen_size();
+
+        // check for minimal screen size
+        if width < Controller::MIN_WIDTH || height < Controller::MIN_HEIGHT {
+            eprintln!(
+                "Screen size too small, need at least {}x{}",
+                Controller::MIN_WIDTH,
+                Controller::MIN_HEIGHT
+            );
+            return;
+        }
+
         self.keybar.resize(width, 1);
         self.keybar.set_pos(0, height - 1);
         self.editor.resize(width, height - 1);

@@ -21,6 +21,7 @@ use curses::Curses;
 // Exit codes
 const EFAULT: i32 = 14;
 const EINVAL: i32 = 22;
+const ENOTTY: i32 = 25;
 
 /// Main entry point.
 fn main() {
@@ -55,6 +56,18 @@ fn main() {
     let config = Config::load();
 
     Curses::initialize(&config.colors);
+
+    // check for minimal screen size
+    let (width, height) = Curses::screen_size();
+    if width < Controller::MIN_WIDTH || height < Controller::MIN_HEIGHT {
+        Curses::close();
+        eprintln!(
+            "Screen size too small, need at least {}x{}",
+            Controller::MIN_WIDTH,
+            Controller::MIN_HEIGHT
+        );
+        std::process::exit(ENOTTY);
+    }
 
     if let Err(err) = Controller::run(&args.files, args.offset, config) {
         Curses::close();
