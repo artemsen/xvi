@@ -8,7 +8,13 @@
 set -eu
 
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
-VERSION=$(git describe --always | sed 's/-g.*//;s/^v//;s/-/./')
+
+if [ $# -ne 0 ]; then
+  VERSION=$1
+else
+  VERSION=$(git describe --tags --long --always | sed 's/-g.*//;s/^v//;s/-/./')
+fi
+
 TMP_DIR="/tmp/xvi_appimage"
 APP_DIR="${TMP_DIR}/prefix"
 APP_IMG="${TMP_DIR}/linuxdeploy-x86_64.AppImage"

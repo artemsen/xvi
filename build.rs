@@ -6,7 +6,7 @@ use std::process::Command;
 fn main() {
     // set version from git
     if let Ok(output) = Command::new("git")
-        .args(&["describe", "--always", "--tags", "--dirty"])
+        .args(&["describe", "--tags", "--long", "--always", "--dirty"])
         .output()
     {
         if output.status.success() {
