@@ -144,7 +144,7 @@ impl History {
             file.to_string()
         };
         // remove previous records and new one
-        self.file_pos.retain(|(f, _)| *f == path);
+        self.file_pos.retain(|(f, _)| *f != path);
         self.file_pos.insert(0, (path, offset));
         self.file_pos.truncate(History::MAX_FILE);
     }
@@ -255,4 +255,25 @@ fn test_set_goto() {
 
     history.add_goto(3);
     assert_eq!(history.goto, vec![3, 55, 0, 1, 2, 4, 5, 6, 7, 8],);
+}
+
+#[test]
+fn test_filepos() {
+    let mut history = History {
+        file_pos: Vec::new(),
+        search: Vec::new(),
+        search_backward: false,
+        goto: Vec::new(),
+        pattern: Vec::new(),
+    };
+
+    history.add_filepos("file1", 1);
+    history.add_filepos("/path/file2", 2);
+    history.add_filepos("file1", 3);
+    assert_eq!(history.file_pos.len(), 2);
+    assert_eq!(history.file_pos[0], ("file1".to_string(), 3));
+    assert_eq!(history.file_pos[1], ("/path/file2".to_string(), 2));
+    assert_eq!(history.get_filepos("file1"), Some(3));
+    assert_eq!(history.get_filepos("/path/file2"), Some(2));
+    assert_eq!(history.get_filepos("file3"), None);
 }
