@@ -428,6 +428,9 @@ impl Editor {
             }
             doc.view.reinit();
         }
+        let cursor = self.documents[self.current].cursor.offset;
+        let base = self.documents[self.current].view.offset;
+        self.move_cursor(&Direction::Absolute(cursor, base));
         self.refresh();
     }
 
