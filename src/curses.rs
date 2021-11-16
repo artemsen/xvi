@@ -7,7 +7,7 @@ use ncurses as nc;
 pub struct Curses;
 impl Curses {
     /// Initialization.
-    pub fn initialize(colors: &[(Color, u8, u8)]) {
+    pub fn initialize(colors: &[(Color, i16, i16)]) {
         // setup locale to get UTF-8 support
         nc::setlocale(nc::LcCategory::all, "");
 
@@ -22,10 +22,10 @@ impl Curses {
         nc::start_color();
         nc::use_default_colors();
         for &(color, fg, bg) in colors.iter() {
-            nc::init_pair(color as i16, i16::from(fg), i16::from(bg));
+            nc::init_pair(color as i16, fg, bg);
         }
 
-        nc::bkgdset(nc::COLOR_PAIR(Color::HexNormal as i16));
+        nc::bkgdset(nc::COLOR_PAIR(Color::HexNorm as i16));
         nc::clear();
     }
 
@@ -239,31 +239,27 @@ impl Curses {
 /// Color identifiers.
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub enum Color {
-    OffsetNormal = 1,
-    OffsetHi,
-    HexNormal,
-    HexHi,
-    HexModified,
-    HexModifiedHi,
+    HexNorm = 1,
+    HexMod,
     HexDiff,
+    HexNormHi,
+    HexModHi,
     HexDiffHi,
-    AsciiNormal,
-    AsciiHi,
-    AsciiModified,
-    AsciiModifiedHi,
+    AsciiNorm,
+    AsciiMod,
     AsciiDiff,
+    AsciiNormHi,
+    AsciiModHi,
     AsciiDiffHi,
-    StatusBar,
-    KeyBarId,
-    KeyBarTitle,
-    DialogNormal,
-    DialogError,
-    DialogShadow,
-    ItemDisabled,
-    ItemFocused,
-    EditNormal,
-    EditFocused,
-    EditSelection,
+    Offset,
+    OffsetHi,
+    Bar,
+    Dialog,
+    Error,
+    Disabled,
+    Focused,
+    Input,
+    Select,
 }
 
 /// External event.
@@ -482,6 +478,6 @@ impl Drop for Window {
 
 impl Default for Window {
     fn default() -> Self {
-        Window::new(1, 1, Color::HexNormal)
+        Window::new(1, 1, Color::HexNorm)
     }
 }

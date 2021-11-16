@@ -218,7 +218,7 @@ impl View {
 
         // draw status bar
         let statusbar = format!("{:<width$}{}", path, stat, width = left_len);
-        self.window.color_on(Color::StatusBar);
+        self.window.color_on(Color::Bar);
         self.window.print(0, 0, &statusbar);
     }
 
@@ -228,7 +228,7 @@ impl View {
     ///
     /// * `doc` - document to render
     fn draw_offset(&self, doc: &Document) {
-        self.window.color_on(Color::OffsetNormal);
+        self.window.color_on(Color::Offset);
         let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
 
         for y in 0..self.lines {
@@ -242,7 +242,7 @@ impl View {
             let line = format!("{:0width$x}", offset, width = self.offset_width);
             self.window.print(0, y + 1 /*status bar*/, &line);
             if cursor_y == y {
-                self.window.color_on(Color::OffsetNormal);
+                self.window.color_on(Color::Offset);
             }
         }
     }
@@ -253,7 +253,7 @@ impl View {
     ///
     /// * `doc` - document to render
     fn draw_hex(&self, doc: &Document) {
-        self.window.color_on(Color::HexNormal);
+        self.window.color_on(Color::HexNorm);
 
         let cursor_x = (doc.cursor.offset % self.columns as u64) as usize;
         let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
@@ -285,18 +285,18 @@ impl View {
             };
 
             if cursor_y == y {
-                self.window.color_on(Color::HexHi);
+                self.window.color_on(Color::HexNormHi);
             }
             self.window.print(left_pos, display_y, &text);
             if cursor_y == y {
-                self.window.color_on(Color::HexNormal);
+                self.window.color_on(Color::HexNorm);
             } else {
                 // highlight current column
                 let col_x = left_pos
                     + cursor_x * (View::BYTES_IN_WORD - 1)
                     + cursor_x / View::BYTES_IN_WORD;
                 self.window
-                    .color(col_x, display_y, View::HEX_LEN, Color::HexHi);
+                    .color(col_x, display_y, View::HEX_LEN, Color::HexNormHi);
             }
         }
     }
@@ -307,7 +307,7 @@ impl View {
     ///
     /// * `doc` - document to render
     fn draw_ascii(&self, doc: &Document) {
-        self.window.color_on(Color::AsciiNormal);
+        self.window.color_on(Color::AsciiNorm);
 
         let cursor_x = (doc.cursor.offset % self.columns as u64) as usize;
         let cursor_y = (doc.cursor.offset - self.offset) as usize / self.columns;
@@ -337,15 +337,15 @@ impl View {
             };
 
             if cursor_y == y {
-                self.window.color_on(Color::AsciiHi);
+                self.window.color_on(Color::AsciiNormHi);
             }
             self.window.print(left_pos, display_y, &text);
             if cursor_y == y {
-                self.window.color_on(Color::AsciiNormal);
+                self.window.color_on(Color::AsciiNorm);
             } else {
                 // highlight current column
                 let col_x = left_pos + cursor_x;
-                self.window.color(col_x, display_y, 1, Color::AsciiHi);
+                self.window.color(col_x, display_y, 1, Color::AsciiNormHi);
             }
         }
     }
@@ -390,18 +390,18 @@ impl View {
             let cy = (offset - self.offset) as usize / self.columns;
             if let Some((x, y)) = self.get_position(offset, true) {
                 let color = if cx == cursor_x || cy == cursor_y {
-                    Color::HexModifiedHi
+                    Color::HexModHi
                 } else {
-                    Color::HexModified
+                    Color::HexMod
                 };
                 self.window.color(x, y, View::HEX_LEN, color);
             }
             if self.ascii_table.is_some() {
                 if let Some((x, y)) = self.get_position(offset, false) {
                     let color = if cx == cursor_x || cy == cursor_y {
-                        Color::AsciiModifiedHi
+                        Color::AsciiModHi
                     } else {
-                        Color::AsciiModified
+                        Color::AsciiMod
                     };
                     self.window.color(x, y, 1, color);
                 }

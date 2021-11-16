@@ -14,32 +14,37 @@ Ascii = 437
 [Colors]
 # Base color theme (Light or Dark)
 Theme = Dark
+
 # Custom color setup (foreground, background), overrides colors from the base theme
-# This is the default configuration for the Dark theme:
-OffsetNormal =    241, 233
-OffsetHi =        250, 235
-HexNormal =       247, 233
-HexHi =           250, 235
-HexModified =     220, 233
-HexModifiedHi =   220, 235
-HexDiff =         124, 233
-HexDiffHi =       160, 235
-AsciiNormal =     241, 233
-AsciiHi =         250, 235
-AsciiModified =   220, 233
-AsciiModifiedHi = 220, 235
-AsciiDiff =       124, 233
-AsciiDiffHi =     160, 235
-StatusBar =       242, 236
-KeyBarId =        242, 233
-KeyBarTitle =     242, 236
-DialogNormal =    235, 245
-DialogError =     250,  88
-DialogShadow =    237, 232
-ItemDisabled =    239, 245
-ItemFocused =     250, 238
-EditNormal =      235, 243
-EditFocused =     250, 238
-EditSelection =   250, 235
+
+# Default palette for the Dark theme:
+#General = -1, -1
+#Highlight = -1, 235
+#Offset = 241, -1
+#Ascii = 241, -1
+#Modified = 220, -1
+#Diff = 124, -1
+#Bar = 242, 236
+#Dialog = 235, 245
+#Error = 250, 88
+#Disabled = 239, 245
+#Focused = 250, 238
+#Input = 235, 243
+#Select = 250, 235
+
+# Default palette for the Light theme:
+#General = 7, 4
+#Highlight = 0, 12
+#Offset = 7, 4
+#Ascii = 7, 4
+#Modified = 11, 4
+#Diff = 1, 4
+#Bar = 0, 6
+#Dialog = 0, 7
+#Error = 15, 1
+#Disabled = 8, 7
+#Focused = 0, 6
+#Input = 0, 6
+#Select = 15, 0
 
 # vim: filetype=dosini

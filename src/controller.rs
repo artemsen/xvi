@@ -383,9 +383,9 @@ impl Controller {
         }
         fn_line += &" ".repeat(width - fn_line.len());
         self.keybar.print(0, 0, &fn_line);
-        self.keybar.color(0, 0, width, Color::KeyBarTitle);
+        self.keybar.color(0, 0, width, Color::Bar);
         for i in 0..10 {
-            self.keybar.color(i * fn_width, 0, 2, Color::KeyBarId);
+            self.keybar.color(i * fn_width, 0, 2, Color::HexNorm);
         }
         self.keybar.refresh();
 

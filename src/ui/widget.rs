@@ -144,9 +144,9 @@ impl CheckBox {
         let text = &format!("[{}] {}", if self.state { 'x' } else { ' ' }, self.title);
         wnd.print(ctx.x, ctx.y, text);
         if ctx.focused {
-            wnd.color(ctx.x, ctx.y, 3, Color::ItemFocused);
+            wnd.color(ctx.x, ctx.y, 3, Color::Focused);
         } else if !ctx.enabled {
-            wnd.color(ctx.x, ctx.y, 3, Color::ItemDisabled);
+            wnd.color(ctx.x, ctx.y, 3, Color::Disabled);
         }
     }
 
@@ -196,9 +196,9 @@ impl ListBox {
         wnd.print(ctx.x + 1, ctx.y, &text);
 
         if ctx.focused {
-            wnd.color(ctx.x, ctx.y, ctx.width, Color::ItemFocused);
+            wnd.color(ctx.x, ctx.y, ctx.width, Color::Focused);
         } else if !ctx.enabled {
-            wnd.color(ctx.x, ctx.y, ctx.width, Color::ItemDisabled);
+            wnd.color(ctx.x, ctx.y, ctx.width, Color::Disabled);
         }
     }
 
@@ -249,9 +249,9 @@ impl Button {
     pub fn draw(&self, wnd: &Window, ctx: &WidgetContext) {
         wnd.print(ctx.x, ctx.y, &self.text);
         if ctx.focused {
-            wnd.color(ctx.x, ctx.y, ctx.width, Color::ItemFocused);
+            wnd.color(ctx.x, ctx.y, ctx.width, Color::Focused);
         } else if !ctx.enabled {
-            wnd.color(ctx.x, ctx.y, ctx.width, Color::ItemDisabled);
+            wnd.color(ctx.x, ctx.y, ctx.width, Color::Disabled);
         }
     }
 }
@@ -376,15 +376,15 @@ impl InputLine {
             wnd.print(ctx.x + ctx.width - 1, ctx.y, "\u{25bc}");
         }
         let color = if ctx.focused {
-            Color::EditFocused
+            Color::Focused
         } else {
-            Color::EditNormal
+            Color::Input
         };
         wnd.color(ctx.x, ctx.y, ctx.width, color);
 
         if ctx.focused {
             if self.selection {
-                wnd.color(ctx.x, ctx.y, self.cursor - self.start, Color::EditSelection);
+                wnd.color(ctx.x, ctx.y, self.cursor - self.start, Color::Select);
             }
             Some((ctx.x + self.cursor - self.start, ctx.y))
         } else {

@@ -46,9 +46,9 @@ impl Dialog {
 
         // dialog color from type
         let color = if dt == DialogType::Normal {
-            Color::DialogNormal
+            Color::Dialog
         } else {
-            Color::DialogError
+            Color::Error
         };
 
         // separator above buttons block
