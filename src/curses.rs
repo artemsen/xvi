@@ -473,8 +473,10 @@ impl Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
+        let window = nc::panel_window(self.panel);
         nc::del_panel(self.panel);
         nc::update_panels();
+        nc::delwin(window);
     }
 }
 
