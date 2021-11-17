@@ -63,7 +63,7 @@ impl Dialog {
         };
 
         Self {
-            window: Window::new(width, height, color),
+            window: Window::new_centered(width, height, color),
             items: vec![separator],
             lcline: Dialog::PADDING_Y,
             focus: ItemId::MAX,
@@ -433,16 +433,19 @@ impl Dialog {
         item.widget.focus_set();
     }
 
-    /// Get max size of a dialog.
+    /// Get max width of the dialog.
     ///
     /// # Return value
     ///
-    /// Max size (width, height) of useful area (exclude borders).
-    pub fn max_size() -> (usize, usize) {
-        let (screen_width, screen_height) = Curses::screen_size();
-        let width = screen_width - Dialog::PADDING_X * 2;
-        let height = screen_height - Dialog::PADDING_Y * 2 - 2 /* buttons + separator */;
-        (width, height)
+    /// Max width of useful area (exclude borders).
+    pub fn max_width() -> usize {
+        let (width, _) = Curses::screen_size();
+        let padding = Dialog::PADDING_X * 2;
+        if width < padding {
+            0
+        } else {
+            width - padding
+        }
     }
 }
 

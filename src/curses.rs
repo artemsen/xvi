@@ -311,12 +311,49 @@ pub enum Key {
 
 /// Curses window.
 pub struct Window {
+    /// Curses window.
+    window: nc::WINDOW,
     /// Curses panel.
     panel: nc::PANEL,
+    /// Window width.
+    width: usize,
+    /// Window height.
+    height: usize,
 }
 
 impl Window {
     /// Create new window.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - window position: column number
+    /// * `y` - window position: line number
+    /// * `width` - window width
+    /// * `height` - window height
+    /// * `color` - background color of the window
+    ///
+    /// # Return value
+    ///
+    /// Window instance.
+    pub fn new(x: usize, y: usize, width: usize, height: usize, color: Color) -> Self {
+        // create curses entities
+        let window = nc::newwin(height as i32, width as i32, y as i32, x as i32);
+        let panel = nc::new_panel(window);
+        nc::update_panels();
+
+        // default background
+        nc::wbkgdset(window, nc::COLOR_PAIR(color as i16));
+        nc::werase(window);
+
+        Self {
+            window,
+            panel,
+            width,
+            height,
+        }
+    }
+
+    /// Create new centered window.
     ///
     /// # Arguments
     ///
@@ -327,31 +364,28 @@ impl Window {
     /// # Return value
     ///
     /// Window instance.
-    pub fn new(width: usize, height: usize, color: Color) -> Self {
+    pub fn new_centered(width: usize, height: usize, color: Color) -> Self {
         debug_assert!(width > 0);
         debug_assert!(height > 0);
 
         // get screen size
         let screen = nc::stdscr();
-        let screen_width = nc::getmaxx(screen);
-        let screen_height = nc::getmaxy(screen);
-        debug_assert!(width <= screen_width as usize);
-        debug_assert!(height <= screen_height as usize);
+        let screen_width = nc::getmaxx(screen).unsigned_abs() as usize;
+        let screen_height = nc::getmaxy(screen).unsigned_abs() as usize;
 
-        // calculate window position, almost center of the screen
-        let x = screen_width / 2 - width as i32 / 2;
-        let y = (screen_height as f32 / 2.5) as i32 - height as i32 / 2;
+        // calculate window position, center of the screen
+        let x = if width >= screen_width {
+            0
+        } else {
+            screen_width / 2 - width / 2
+        };
+        let y = if height >= screen_height {
+            0
+        } else {
+            (screen_height as f32 / 2.2) as usize - height / 2
+        };
 
-        // create curses entities
-        let window = nc::newwin(height as i32, width as i32, y, x);
-        let panel = nc::new_panel(window);
-        nc::update_panels();
-
-        // default background
-        nc::wbkgdset(window, nc::COLOR_PAIR(color as i16));
-        nc::werase(window);
-
-        Self { panel }
+        Window::new(x, y, width, height, color)
     }
 
     /// Hide the window.
@@ -365,11 +399,7 @@ impl Window {
     ///
     /// Size of the window (width,height).
     pub fn get_size(&self) -> (usize, usize) {
-        let window = nc::panel_window(self.panel);
-        (
-            nc::getmaxx(window).unsigned_abs() as usize,
-            nc::getmaxy(window).unsigned_abs() as usize,
-        )
+        (self.width, self.height)
     }
 
     /// Resize the window.
@@ -379,8 +409,12 @@ impl Window {
     /// * `width` - window width
     /// * `height` - window height
     pub fn resize(&mut self, width: usize, height: usize) {
-        let window = nc::panel_window(self.panel);
-        nc::wresize(window, height as i32, width as i32);
+        debug_assert!(width > 0);
+        debug_assert!(height > 0);
+
+        self.width = width;
+        self.height = height;
+        nc::wresize(self.window, height as i32, width as i32);
     }
 
     /// Move window.
@@ -390,14 +424,13 @@ impl Window {
     /// * `x` - absolute screen coordinates: column number
     /// * `y` - absolute screen coordinates: line number
     pub fn set_pos(&self, x: usize, y: usize) {
-        let window = nc::panel_window(self.panel);
-        nc::mvwin(window, y as i32, x as i32);
+        let status = nc::mvwin(self.window, y as i32, x as i32);
+        debug_assert_eq!(status, nc::OK);
     }
 
     /// Clear the window.
     pub fn clear(&self) {
-        let window = nc::panel_window(self.panel);
-        nc::werase(window);
+        nc::werase(self.window);
     }
 
     /// Print text on the window.
@@ -408,10 +441,9 @@ impl Window {
     /// * `y` - line number
     /// * `text` - text to print
     pub fn print(&self, x: usize, y: usize, text: &str) {
-        let window = nc::panel_window(self.panel);
-        debug_assert!(x <= nc::getmaxx(window) as usize);
-        debug_assert!(y <= nc::getmaxy(window) as usize);
-        nc::mvwaddstr(window, y as i32, x as i32, text);
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+        nc::mvwaddstr(self.window, y as i32, x as i32, text);
     }
 
     /// Colorize the specified range.
@@ -423,11 +455,17 @@ impl Window {
     /// * `width` - number of characters to colorize
     /// * `color` - color to set
     pub fn color(&self, x: usize, y: usize, width: usize, color: Color) {
-        let window = nc::panel_window(self.panel);
-        debug_assert!(x <= nc::getmaxx(window) as usize);
-        debug_assert!(y <= nc::getmaxy(window) as usize);
-        debug_assert!(width <= nc::getmaxx(window) as usize);
-        nc::mvwchgat(window, y as i32, x as i32, width as i32, 0, color as i16);
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+        debug_assert!(width + x <= self.width);
+        nc::mvwchgat(
+            self.window,
+            y as i32,
+            x as i32,
+            width as i32,
+            0,
+            color as i16,
+        );
     }
 
     /// Set color for further prints.
@@ -436,14 +474,12 @@ impl Window {
     ///
     /// * `color` - color to set
     pub fn color_on(&self, color: Color) {
-        let window = nc::panel_window(self.panel);
-        nc::wattron(window, nc::COLOR_PAIR(color as i16));
+        nc::wattron(self.window, nc::COLOR_PAIR(color as i16));
     }
 
     /// Refresh the window, flushes all changes to the screen.
     pub fn refresh(&self) {
-        let window = nc::panel_window(self.panel);
-        nc::wrefresh(window);
+        nc::wrefresh(self.window);
     }
 
     /// Show cursor at specified position.
@@ -453,10 +489,9 @@ impl Window {
     /// * `x` - column number
     /// * `y` - line number
     pub fn show_cursor(&self, x: usize, y: usize) {
-        let window = nc::panel_window(self.panel);
         // wmove doesn't work, use absolute coordinates
-        let x = nc::getbegx(window) + x as i32;
-        let y = nc::getbegy(window) + y as i32;
+        let x = nc::getbegx(self.window) + x as i32;
+        let y = nc::getbegy(self.window) + y as i32;
         nc::mv(y, x);
         nc::curs_set(nc::CURSOR_VISIBILITY::CURSOR_VISIBLE);
     }
@@ -469,15 +504,8 @@ impl Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
-        let window = nc::panel_window(self.panel);
         nc::del_panel(self.panel);
         nc::update_panels();
-        nc::delwin(window);
-    }
-}
-
-impl Default for Window {
-    fn default() -> Self {
-        Window::new(1, 1, Color::HexNorm)
+        nc::delwin(self.window);
     }
 }

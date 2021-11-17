@@ -33,11 +33,6 @@ pub struct Controller {
 }
 
 impl Controller {
-    /// Min width of the screen.
-    pub const MIN_WIDTH: usize = 60;
-    /// Min height of the screen.
-    pub const MIN_HEIGHT: usize = 16;
-
     /// Run controller.
     ///
     /// # Arguments
@@ -65,12 +60,18 @@ impl Controller {
         // create controller instance
         let mut instance = Self {
             editor: Editor::new(files, &config)?,
-            keybar: Window::default(),
+            keybar: Window::new(0, 0, 0, 0, Color::Bar),
             history,
             config,
         };
 
-        instance.resize();
+        if !instance.resize() {
+            return Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Not enough screen space to display",
+            ));
+        }
+
         if initial_offset != 0 {
             instance
                 .editor
@@ -356,10 +357,14 @@ impl Controller {
     /// Draw editor.
     fn draw(&self) {
         Window::hide_cursor();
+        self.draw_keybar();
+        self.editor.draw();
+    }
 
-        // draw key bar (bottom Fn line).
+    /// Draw key bar (bottom Fn line).
+    fn draw_keybar(&self) {
         let (width, _) = self.keybar.get_size();
-        let titles = &[
+        let names = &[
             "Help",   // F1
             "Save",   // F2
             "Goto",   // F3
@@ -371,45 +376,44 @@ impl Controller {
             "Setup",  // F9
             "Exit",   // F10
         ];
-        let mut fn_line = String::new();
-        let fn_width = width / 10;
-        let max_name = fn_width - 2 /* fn number */;
-        for (i, name) in titles.iter().enumerate() {
+
+        let mut keybar = String::new();
+        let id_len = 2; // Fn id (decimal number from 1 to 10)
+        let name_min = 1; // at least 1 char for name
+        let keybar_min = names.len() * (id_len + name_min);
+        let key_len = width.max(keybar_min) / names.len();
+        let name_max = key_len - id_len;
+        for (i, name) in names.iter().enumerate() {
             let mut name = name.to_string();
-            if name.len() > max_name {
-                name.truncate(max_name);
+            if i < names.len() - 1 && name.len() > name_max {
+                name.truncate(name_max);
             }
-            fn_line += &format!("{:>2}{:<width$}", i + 1, name, width = max_name);
+            keybar += &format!("{:>2}{:<width$}", i + 1, name, width = name_max);
         }
-        fn_line += &" ".repeat(width - fn_line.len());
-        self.keybar.print(0, 0, &fn_line);
-        self.keybar.color(0, 0, width, Color::Bar);
-        for i in 0..10 {
-            self.keybar.color(i * fn_width, 0, 2, Color::HexNorm);
+        keybar.truncate(width);
+
+        self.keybar.clear();
+        self.keybar.print(0, 0, &keybar);
+        for i in 0..names.len() {
+            let pos = i * key_len;
+            if pos + id_len > width {
+                break;
+            }
+            self.keybar.color(pos, 0, id_len, Color::HexNorm);
         }
         self.keybar.refresh();
-
-        // draw documents
-        self.editor.draw();
     }
 
     /// Screen resize handler.
-    fn resize(&mut self) {
+    ///
+    /// # Return value
+    ///
+    /// `false` if screen space is not enough
+    fn resize(&mut self) -> bool {
         let (width, height) = Curses::screen_size();
-
-        // check for minimal screen size
-        if width < Controller::MIN_WIDTH || height < Controller::MIN_HEIGHT {
-            eprintln!(
-                "Screen size too small, need at least {}x{}",
-                Controller::MIN_WIDTH,
-                Controller::MIN_HEIGHT
-            );
-            return;
-        }
-
         self.keybar.resize(width, 1);
         self.keybar.set_pos(0, height - 1);
-        self.editor.resize(width, height - 1);
+        self.editor.resize(width, height - 1)
     }
 
     /// Show mini help.

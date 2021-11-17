@@ -139,9 +139,7 @@ impl MessageBox {
     ///
     /// Size of the dialog window.
     fn calc_size(message: &[&str], buttons: &[(StandardButton, bool)]) -> (usize, usize) {
-        let (max_width, max_height) = Dialog::max_size();
-
-        // calculate dialog width
+        let max_width = Dialog::max_width();
         let mut width = 0;
 
         // size of buttons block
@@ -152,15 +150,12 @@ impl MessageBox {
 
         // longest message line
         for msg in message.iter() {
-            let len = msg.len();
-            if width < len {
-                width = len;
+            let len = msg.graphemes(true).count();
+            if width < max_width && width < len {
+                width = len.min(max_width);
             }
         }
 
-        // calculate dialog height
-        let height = message.len();
-
-        (width.min(max_width), height.min(max_height))
+        (width, message.len())
     }
 }

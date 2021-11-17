@@ -81,10 +81,18 @@ impl Editor {
     ///
     /// * `width` - new width of workspace
     /// * `height` - new height of workspace
-    pub fn resize(&mut self, width: usize, height: usize) {
+    ///
+    /// # Return value
+    ///
+    /// `false` if screen space is not enough
+    pub fn resize(&mut self, width: usize, height: usize) -> bool {
         // height of a single view (lines per document)
         let lpd = height / self.documents.len();
         let last = self.documents.len() - 1;
+
+        if width < View::MIN_WIDTH || lpd < View::MIN_HEIGHT {
+            return false;
+        }
 
         // resize views
         for (index, doc) in self.documents.iter_mut().enumerate() {
@@ -104,6 +112,8 @@ impl Editor {
         let view_offset = current.view.offset;
         let cursor_offset = current.cursor.offset;
         self.move_cursor(&Direction::Absolute(cursor_offset, view_offset));
+
+        true
     }
 
     /// Draw documents in current workspace.
@@ -119,7 +129,7 @@ impl Editor {
             if current.cursor.half == HalfByte::Right {
                 x += 1;
             }
-            current.view.window.show_cursor(x, y);
+            current.view.workspace.show_cursor(x, y);
         }
     }
 
