@@ -16,7 +16,7 @@ jobs:
         fetch-depth: 0
 
     - name: Get version
-      run: echo "::set-output name=VERSION::$(git describe --tags --long --always | sed 's/-g.*//;s/^v//;s/-/./')"
+      run: echo "::set-output name=VERSION::$(make version)"
       id: version
 
     - name: Setup rust
@@ -31,7 +31,7 @@ jobs:
       run: cargo test
 
     - name: Build AppImage
-      run: ./appimage/build.sh ${{ steps.version.outputs.VERSION }}
+      run: make appimage
 
     - name: Upload AppImage
       uses: actions/upload-artifact@v2
