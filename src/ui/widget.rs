@@ -275,7 +275,7 @@ impl StandardButton {
     /// # Return value
     ///
     /// Button text.
-    pub fn text(&self, default: bool) -> String {
+    pub fn text(self, default: bool) -> String {
         let title = match self {
             StandardButton::OK => "OK",
             StandardButton::Cancel => "Cancel",

@@ -122,6 +122,7 @@ impl Controller {
     /// # Return value
     ///
     /// true if key was handled
+    #[allow(clippy::too_many_lines)]
     fn key_input_common(&mut self, key: &KeyPress) -> bool {
         match key.key {
             Key::F(1) => {
@@ -384,7 +385,7 @@ impl Controller {
         let key_len = width.max(keybar_min) / names.len();
         let name_max = key_len - id_len;
         for (i, name) in names.iter().enumerate() {
-            let mut name = name.to_string();
+            let mut name = (*name).to_string();
             if i < names.len() - 1 && name.len() > name_max {
                 name.truncate(name_max);
             }

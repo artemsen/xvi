@@ -37,7 +37,7 @@ impl MessageBox {
 
         // add message text to the dialog window
         for msg in message.iter() {
-            let mut line = msg.to_string();
+            let mut line = (*msg).to_string();
             let line_len = line.graphemes(true).count();
             if line_len > width {
                 // shrink line
@@ -112,20 +112,17 @@ impl MessageBox {
     ///
     /// # Return value
     ///
-    /// 'true` if attempt must be repeated
+    /// `true` if attempt must be repeated
     pub fn retry_write(file: &str, err: &Error) -> bool {
-        if let Some(button) = MessageBox::error_write(
+        MessageBox::error_write(
             file,
             err,
             &[
                 (StandardButton::Retry, true),
                 (StandardButton::Cancel, false),
             ],
-        ) {
-            button == StandardButton::Retry
-        } else {
-            false
-        }
+        )
+        .map_or_else(|| false, |b| b == StandardButton::Retry)
     }
 
     /// Calculate window size.

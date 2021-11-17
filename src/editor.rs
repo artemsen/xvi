@@ -447,7 +447,7 @@ impl Editor {
     /// Refresh documents buffers: data cache, changed set, diff etc.
     fn refresh(&mut self) {
         // refresh buffer for all documents
-        self.documents.iter_mut().for_each(|doc| doc.refresh());
+        self.documents.iter_mut().for_each(Document::refresh);
 
         // update diff markers
         if self.documents.len() > 1 {
