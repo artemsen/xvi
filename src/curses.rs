@@ -47,6 +47,15 @@ impl Curses {
         )
     }
 
+    /// Pass screen resize event.
+    /// Used by dialogs to notify the controller about screen resize.
+    pub fn screen_resize() {
+        let window = nc::stdscr();
+        let height = nc::getmaxy(window);
+        let width = nc::getmaxx(window);
+        ncurses::resizeterm(height, width);
+    }
+
     /// Read next event.
     ///
     /// # Return value

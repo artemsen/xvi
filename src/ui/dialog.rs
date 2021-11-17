@@ -17,6 +17,8 @@ pub struct Dialog {
     focus: ItemId,
     /// Title.
     title: String,
+    /// Resize flag.
+    resized: bool,
 }
 
 impl Dialog {
@@ -68,6 +70,7 @@ impl Dialog {
             lcline: Dialog::PADDING_Y,
             focus: ItemId::MAX,
             title: format!(" {} ", title),
+            resized: false,
         }
     }
 
@@ -93,6 +96,8 @@ impl Dialog {
     ///
     /// Last focused item Id or None if Esc pressed.
     pub fn show(&mut self, handler: &mut dyn DialogHandler) -> Option<ItemId> {
+        let mut last_focus = None;
+
         if self.focus == ItemId::MAX {
             self.initialize_focus();
         }
@@ -104,7 +109,9 @@ impl Dialog {
 
             // handle next event
             match Curses::wait_event() {
-                Event::TerminalResize => {}
+                Event::TerminalResize => {
+                    self.resized = true;
+                }
                 Event::KeyPress(event) => {
                     match event.key {
                         Key::Tab => {
@@ -115,11 +122,12 @@ impl Dialog {
                             }
                         }
                         Key::Esc => {
-                            return None;
+                            break;
                         }
                         Key::Enter => {
                             if handler.on_close(self, self.focus) {
-                                return Some(self.focus);
+                                last_focus = Some(self.focus);
+                                break;
                             }
                         }
                         _ => {
@@ -142,6 +150,12 @@ impl Dialog {
                 }
             }
         }
+
+        if self.resized {
+            Curses::screen_resize();
+        }
+
+        last_focus
     }
 
     /// Show simple dialog without external handlers.
