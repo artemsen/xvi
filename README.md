@@ -16,6 +16,22 @@ Hex editor with ncurses based user interface:
 
 ![Screenshot](https://raw.githubusercontent.com/artemsen/xvi/master/.github/screenshot2.png)
 
+## Install
+
+- Arch users can install the program via [AUR](https://aur.archlinux.org/packages/xvi-git);
+- AppImage is available in [Releases](https://github.com/artemsen/xvi/releases).
+
+## Configure
+
+The editor searches for the configuration file with name `config` in the
+following directories:
+- `$XDG_CONFIG_HOME/xvi`
+- `$HOME/.config/xvi`
+
+Sample file is available [here](https://github.com/artemsen/xvi/blob/master/extra/xvirc).
+
+See `man xvirc` for details.
+
 ## Build
 
 The project uses Rust and Cargo:
@@ -23,8 +39,3 @@ The project uses Rust and Cargo:
 ```
 cargo build --release
 ```
-
-## Install
-
-- Arch users can install the program via [AUR](https://aur.archlinux.org/packages/xvi-git);
-- AppImage is available in [Releases](https://github.com/artemsen/xvi/releases).
