@@ -1,0 +1,85 @@
+.\" XVI editor configuration file format.
+.\" Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
+.TH XVIRC 5 2021-11-21 xvi "XVI editor configuration"
+.SH NAME
+xvirc \- XVI configuration file
+.\" possible file locations
+.SH SYNOPSIS
+.SY \fI$XDG_CONFIG_HOME\fR/xvi/config
+.SY \fI$HOME\fR/.config/xvi/config
+.\" format description
+.SH DESCRIPTION
+.SS General format description
+The XVI configuration file is a text-based INI file used to override the
+default settings.
+.PP
+The structure of the INI file consists of key-value pairs for properties and
+sections that organize properties.
+The basic element contained in the INI file is the key or property.
+Every key has a name and a value, delimited by an equals sign (=).
+The name appears to the left of the equals sign. The value can contain any
+character.
+.PP
+Keys are grouped into named sections. The section name appears on a line by
+itself, in square brackets ([ and ]). All keys after the section declaration
+are associated with that section.
+.PP
+The number sign (#) at the beginning of the line indicates a comment.
+Empty lines and comments are ignored.
+.SS [View] section
+.PP
+The section contains configuration of the view.
+.IP "\fBFixedWidth\fR: boolean (0 or 1), default is 0 (false)"
+Enables or disables fixed width mode (16 bytes per line).
+.IP "\fBAscii\fR: text, default is \fI437\fR"
+Specifies the ASCII field charset, can be one of the following:
+.br
+\fInone\fR: disable ASCII field (show HEX only);
+.nf
+\fI437\fR: CP437 (original IBM PC);
+\fI1251\fR: Windows-1251 (Cyrillic);
+\fIascii\fR: show only ASCII printable characters;
+\fInamed\fR: named control characters.
+.SS [Colors] section
+.PP
+The section contains customizing the colors of the user interface.
+The \fBTheme\fR key specifies the base color set.
+Other keys override the color for a specific UI element, the value is a pair
+of two integers: foreground and background, separated by comma (,).
+The special value -1 is the default color from the terminal settings.
+.IP "\fBTheme\fR: text, default is \fIDark\fR"
+Base color theme, can be \fILight\fR or \fIDark\fR.
+# Custom color setup (foreground, background), overrides colors from the base theme
+.IP "\fBGeneral\fR: general colors, used for the HEX field"
+.IP "\fBHighlight\fR: highlight color of the current line and column"
+.IP "\fBOffset\fR: color of the offset field"
+.IP "\fBAscii\fR: color of the ASCII field"
+.IP "\fBModified\fR: color of modified but not saved bytes"
+.IP "\fBDiff\fR: color of different bytes in file diff mode"
+.IP "\fBBar\fR: color of status and key bars"
+.IP "\fBDialog\fR: color of dialogs"
+.IP "\fBError\fR: color of error messages"
+.IP "\fBDisabled\fR: color for disabled widgets"
+.IP "\fBFocused\fR: color of the currently focused widget"
+.IP "\fBInput\fR: color if the input widget"
+.IP "\fBSelect\fR: selection color inside the input widget"
+.\" example file
+.SH EXAMPLES
+.EX
+[View]
+FixedWidth = 0
+Ascii = 437
+.BR
+[Colors]
+Theme = Dark
+Highlight = -1, 235
+.EE
+.\" related man pages
+.SH SEE ALSO
+xvi(1)
+.\" link to homepage
+.SH BUGS
+For suggestions, comments, bug reports etc. visit the
+.UR https://github.com/artemsen/xvi
+project homepage
+.UE .

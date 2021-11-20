@@ -1,28 +1,28 @@
-.TH xvi 1 "November 2021" "xvi" "XVI editor manual"
+.\" XVI hexadecimal editor
+.\" Copyright (C) 2021 Artem Senichev <artemsen@gmail.com>
+.TH XVI 1 2021-11-21 xvi "XVI editor manual"
 .SH NAME
 xvi \- hexadecimal editor
 .SH SYNOPSIS
 xvi [\fIOPTIONS\fR...] \fIFILE...\fR
 .SH DESCRIPTION
 \fBxvi\fR is the hex editor with ncurses based user interface.
-.
 .SH OPTIONS
-.PP
 .IP "\fB\-h\fR, \fB\-\-help\fR"
 Display help message.
 .IP "\fB\-v\fR, \fB\-\-version\fR"
 Display version information.
 .IP "\fB\-o\fR, \fB\-\-offset\fR \fIADDRESS\fR"
 Set the initial position of the cursor.
-.
+.\" keys
 .SH KEYBINDINGS
 .SS Common
 .IP "\fBArrows\fR and vim-like moving keys (\fBh\fR,\fBj\fR,\fBk\fR,\fBl\fR)"
 Move cursor.
 .IP "\fBShift+Up\fR, \fBShift+Down\fR"
-Scroll 1 line up/down.
+Scroll one line up/down.
 .IP "\fBShift+Left\fR, \fBShift+Right\fR"
-Jump to next/previous 4-bytes aligned word.
+Jump to the next/previous 4-bytes aligned word.
 .IP "\fBAlt+Left\fR, \fBAlt+Up\fR"
 Jump to the previous closest changed byte.
 .IP "\fBAlt+Right\fR, \fBAlt+Down\fR"
@@ -36,9 +36,9 @@ Set focus to the previous document.
 .IP "\fBCtrl+Down\fR"
 Set focus to the next document.
 .IP "\fBShift+Up\fR, \fBShift+Down\fR"
-Scroll 1 line up/down.
+Scroll one line up/down.
 .IP "\fBPgUp\fR, \fBPgDown\fR"
-Scroll 1 page up/down.
+Scroll one page up/down.
 .IP "\fBHome\fR, \fBEnd\fR"
 Move cursor to the start/end of the current line.
 .IP "\fBCtrl+Home\fR, \fBCtrl+End\fR"
@@ -53,26 +53,25 @@ Undo last change.
 .IP "\fBg\fR, \fBG\fR"
 Move cursor to the start/end of the current file.
 .IP "\fB:\fP"
-Goto.
+Goto (jump to offset).
 .IP "\fB/\fP"
-Find.
+Find sequence.
 .IP "\fBn\fP"
-Find next.
+Find next entry.
 .IP "\fBN\fP"
-Find previous.
-.
+Find previous entry.
 .IP "\fBF1\fP"
-Show simple help.
+Show mini help.
 .IP "\fBF2\fP"
-Save current file.
+Save the current file.
 .IP "\fBShift+F2\fP"
-Show file with the new name (save as).
+Save the current file with a new name (save as).
 .IP "\fBF3\fP"
-Goto.
+Goto (jump to offset).
 .IP "\fBF5\fP"
-Find.
+Find sequence.
 .IP "\fBShift+F5\fP"
-Find next.
+Find next entry.
 .IP "\fBF6\fP"
 Fill the range with a pattern.
 .IP "\fBF7\fP"
@@ -83,9 +82,12 @@ Cut out bytes from the file.
 Viewer setup.
 .IP "\fBEsc\fP, \fBF10\fP"
 Exit the program.
-.
-.SH NOTES
-For suggestions, comments, bug reports etc. visit https://github.com/artemsen/xvi
-.SH AUTHOR
-Artem Senichev <artemsen@gmail.com>
-.
+.\" related man pages
+.SH SEE ALSO
+xvirc(5)
+.\" link to homepage
+.SH BUGS
+For suggestions, comments, bug reports etc. visit the
+.UR https://github.com/artemsen/xvi
+project homepage
+.UE .

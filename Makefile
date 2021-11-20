@@ -32,9 +32,13 @@ version:
 
 install: $(TARGET_BIN)
 	install -D -m 755 $(TARGET_BIN) $(PREFIX)/bin/$(notdir $(TARGET_BIN))
+	install -D -m 644 $(EXTRA_DIR)/xvi.1 $(PREFIX)/share/man/man1/xvi.1
+	install -D -m 644 $(EXTRA_DIR)/xvirc.5 $(PREFIX)/share/man/man5/xvirc.5
 
 uninstall:
 	rm -f "$(PREFIX)/bin/$(notdir $(TARGET_BIN))"
+	rm -f "$(PREFIX)/share/man/man1/xvi.1"
+	rm -f "$(PREFIX)/share/man/man5/xvirc.5"
 
 appimage: $(APPIMG_BIN)
 

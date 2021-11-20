@@ -15,9 +15,7 @@ Ascii = 437
 # Base color theme (Light or Dark)
 Theme = Dark
 
-# Custom color setup (foreground, background), overrides colors from the base theme
-
-# Default palette for the Dark theme:
+# Default palette for the Dark theme
 #General = -1, -1
 #Highlight = -1, 235
 #Offset = 241, -1
@@ -32,7 +30,7 @@ Theme = Dark
 #Input = 235, 243
 #Select = 250, 235
 
-# Default palette for the Light theme:
+# Default palette for the Light theme
 #General = 7, 4
 #Highlight = 0, 12
 #Offset = 7, 4
