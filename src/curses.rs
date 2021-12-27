@@ -331,6 +331,9 @@ pub struct Window {
 }
 
 impl Window {
+    // Font styles
+    pub const BOLD: nc::attr_t = nc::A_BOLD();
+
     /// Create new window.
     ///
     /// # Arguments
@@ -406,7 +409,7 @@ impl Window {
     ///
     /// # Return value
     ///
-    /// Size of the window (width,height).
+    /// Size of the window (width, height).
     pub fn get_size(&self) -> (usize, usize) {
         (self.width, self.height)
     }
@@ -455,7 +458,7 @@ impl Window {
         nc::mvwaddstr(self.window, y as i32, x as i32, text);
     }
 
-    /// Colorize the specified range.
+    /// Set color for the specified range.
     ///
     /// # Arguments
     ///
@@ -463,21 +466,54 @@ impl Window {
     /// * `y` - line number
     /// * `width` - number of characters to colorize
     /// * `color` - color to set
-    pub fn color(&self, x: usize, y: usize, width: usize, color: Color) {
+    pub fn set_color(&self, x: usize, y: usize, width: usize, color: Color) {
         debug_assert!(x <= self.width);
         debug_assert!(y <= self.height);
         debug_assert!(width + x <= self.width);
+
+        // get current attributes
+        let mut attr = 0;
+        let mut _color = 0;
+        nc::wattr_get(self.window, &mut attr, &mut _color);
+
         nc::mvwchgat(
             self.window,
             y as i32,
             x as i32,
             width as i32,
-            0,
+            attr,
+            color as i16,
+        );
+    }
+    /// Set style for the specified range.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - start column
+    /// * `y` - line number
+    /// * `width` - number of characters to colorize
+    /// * `style` - style to set
+    pub fn set_style(&self, x: usize, y: usize, width: usize, style: nc::attr_t) {
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+        debug_assert!(width + x <= self.width);
+
+        // get current attributes
+        let mut _attr = 0;
+        let mut color = 0;
+        nc::wattr_get(self.window, &mut _attr, &mut color);
+
+        nc::mvwchgat(
+            self.window,
+            y as i32,
+            x as i32,
+            width as i32,
+            style,
             color as i16,
         );
     }
 
-    /// Set color for further prints.
+    /// Set default color for further print operations.
     ///
     /// # Arguments
     ///

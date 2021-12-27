@@ -400,7 +400,7 @@ impl Controller {
             if pos + id_len > width {
                 break;
             }
-            self.keybar.color(pos, 0, id_len, Color::HexNorm);
+            self.keybar.set_color(pos, 0, id_len, Color::HexNorm);
         }
         self.keybar.refresh();
     }

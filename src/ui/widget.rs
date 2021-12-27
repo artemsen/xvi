@@ -143,10 +143,13 @@ impl CheckBox {
     pub fn draw(&self, wnd: &Window, ctx: &WidgetContext) {
         let text = &format!("[{}] {}", if self.state { 'x' } else { ' ' }, self.title);
         wnd.print(ctx.x, ctx.y, text);
-        if ctx.focused {
-            wnd.color(ctx.x, ctx.y, 3, Color::Focused);
-        } else if !ctx.enabled {
-            wnd.color(ctx.x, ctx.y, 3, Color::Disabled);
+        if ctx.focused || !ctx.enabled {
+            let color = if ctx.focused {
+                Color::Focused
+            } else {
+                Color::Disabled
+            };
+            wnd.set_color(ctx.x, ctx.y, 3, color);
         }
     }
 
@@ -195,10 +198,13 @@ impl ListBox {
         wnd.print(ctx.x + ctx.width - 1, ctx.y, "\u{25ba}");
         wnd.print(ctx.x + 1, ctx.y, &text);
 
-        if ctx.focused {
-            wnd.color(ctx.x, ctx.y, ctx.width, Color::Focused);
-        } else if !ctx.enabled {
-            wnd.color(ctx.x, ctx.y, ctx.width, Color::Disabled);
+        if ctx.focused || !ctx.enabled {
+            let color = if ctx.focused {
+                Color::Focused
+            } else {
+                Color::Disabled
+            };
+            wnd.set_color(ctx.x, ctx.y, ctx.width, color);
         }
     }
 
@@ -248,10 +254,13 @@ impl Button {
     /// * `ctx` - widget context
     pub fn draw(&self, wnd: &Window, ctx: &WidgetContext) {
         wnd.print(ctx.x, ctx.y, &self.text);
-        if ctx.focused {
-            wnd.color(ctx.x, ctx.y, ctx.width, Color::Focused);
-        } else if !ctx.enabled {
-            wnd.color(ctx.x, ctx.y, ctx.width, Color::Disabled);
+        if ctx.focused || !ctx.enabled {
+            let color = if ctx.focused {
+                Color::Focused
+            } else {
+                Color::Disabled
+            };
+            wnd.set_color(ctx.x, ctx.y, ctx.width, color);
         }
     }
 }
@@ -380,11 +389,11 @@ impl InputLine {
         } else {
             Color::Input
         };
-        wnd.color(ctx.x, ctx.y, ctx.width, color);
+        wnd.set_color(ctx.x, ctx.y, ctx.width, color);
 
         if ctx.focused {
             if self.selection {
-                wnd.color(ctx.x, ctx.y, self.cursor - self.start, Color::Select);
+                wnd.set_color(ctx.x, ctx.y, self.cursor - self.start, Color::Select);
             }
             Some((ctx.x + self.cursor - self.start, ctx.y))
         } else {

@@ -333,17 +333,18 @@ impl Dialog {
         let (mut width, mut height) = self.window.get_size();
         width -= Dialog::BORDER_X * 2;
         height -= Dialog::BORDER_Y * 2;
-        // top and bottom lines with corners
-        self.window.print(
-            Dialog::BORDER_X,
-            Dialog::BORDER_Y,
-            &format!("\u{2554}{:\u{2550}^1$}\u{2557}", &self.title, width - 2),
-        );
-        self.window.print(
-            Dialog::BORDER_X,
-            Dialog::BORDER_Y + height - 1,
-            &format!("\u{255a}{:\u{2550}^1$}\u{255d}", "", width - 2),
-        );
+        // top line with title
+        let line = "\u{2554}".to_string() + &"\u{2550}".repeat(width - 2) + "\u{2557}";
+        self.window.print(Dialog::BORDER_X, Dialog::BORDER_Y, &line);
+        let length = self.title.len();
+        let center = Dialog::BORDER_X + width / 2 - length / 2;
+        self.window.print(center, Dialog::BORDER_Y, &self.title);
+        self.window
+            .set_style(center, Dialog::BORDER_Y, length, Window::BOLD);
+        // bottom line
+        let line = "\u{255a}".to_string() + &"\u{2550}".repeat(width - 2) + "\u{255d}";
+        self.window
+            .print(Dialog::BORDER_X, Dialog::BORDER_Y + height - 1, &line);
         // left and right lines
         for y in Dialog::BORDER_Y + 1..Dialog::BORDER_Y + height - 1 {
             self.window.print(Dialog::BORDER_X, y, "\u{2551}");

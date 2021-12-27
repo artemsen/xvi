@@ -321,7 +321,7 @@ impl View {
                     + cursor_x * (View::BYTES_IN_WORD - 1)
                     + cursor_x / View::BYTES_IN_WORD;
                 self.workspace
-                    .color(col_x, y, View::HEX_LEN, Color::HexNormHi);
+                    .set_color(col_x, y, View::HEX_LEN, Color::HexNormHi);
             }
         }
     }
@@ -365,7 +365,7 @@ impl View {
             } else {
                 // highlight current column
                 let col_x = left_pos + cursor_x;
-                self.workspace.color(col_x, y, 1, Color::AsciiNormHi);
+                self.workspace.set_color(col_x, y, 1, Color::AsciiNormHi);
             }
         }
     }
@@ -390,7 +390,7 @@ impl View {
                 } else {
                     Color::HexDiff
                 };
-                self.workspace.color(x, y, View::HEX_LEN, color);
+                self.workspace.set_color(x, y, View::HEX_LEN, color);
             }
             if self.ascii_table.is_some() {
                 if let Some((x, y)) = self.get_position(offset, false) {
@@ -399,7 +399,7 @@ impl View {
                     } else {
                         Color::AsciiDiff
                     };
-                    self.workspace.color(x, y, 1, color);
+                    self.workspace.set_color(x, y, 1, color);
                 }
             }
         }
@@ -414,7 +414,7 @@ impl View {
                 } else {
                     Color::HexMod
                 };
-                self.workspace.color(x, y, View::HEX_LEN, color);
+                self.workspace.set_color(x, y, View::HEX_LEN, color);
             }
             if self.ascii_table.is_some() {
                 if let Some((x, y)) = self.get_position(offset, false) {
@@ -423,7 +423,7 @@ impl View {
                     } else {
                         Color::AsciiMod
                     };
-                    self.workspace.color(x, y, 1, color);
+                    self.workspace.set_color(x, y, 1, color);
                 }
             }
         }
