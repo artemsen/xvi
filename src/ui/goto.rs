@@ -31,7 +31,7 @@ impl GotoDialog {
     /// Absolute offset to jump.
     pub fn show(history: &[u64], current: u64) -> Option<u64> {
         // create dialog
-        let mut dlg = Dialog::new(44, 6, DialogType::Normal, "Goto");
+        let mut dlg = Dialog::new(44, 5, DialogType::Normal, "Goto");
 
         dlg.add_line(WidgetType::StaticText("Absolute offset".to_string()));
 
