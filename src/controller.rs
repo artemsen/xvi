@@ -304,10 +304,10 @@ impl Controller {
             Key::Char('l') => {
                 self.editor.move_cursor(&Direction::NextByte);
             }
-            Key::Char('j') => {
+            Key::Char('k') => {
                 self.editor.move_cursor(&Direction::LineUp);
             }
-            Key::Char('k') => {
+            Key::Char('j') => {
                 self.editor.move_cursor(&Direction::LineDown);
             }
             Key::Char('a'..='f' | 'A'..='F' | '0'..='9') => {
